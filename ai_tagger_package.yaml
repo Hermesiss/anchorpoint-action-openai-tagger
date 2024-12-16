@@ -1,0 +1,27 @@
+#Anchorpoint Markup Language
+#Predefined Variables: e.g. ${path}
+#Environment Variables: e.g. ${MY_VARIABLE}
+#Full documentation: https://docs.anchorpoint.app/docs/actions/create-actions
+
+version: "1.0"
+
+action:
+  #Must Have Properties
+  name: "AI Folder and File Tools"
+
+  #Optional Properties
+  version: 1
+  id: "ht::package::ai_tagger"
+  category: "ai"
+  type: package
+  enable: true
+  author: "Anchorpoint Software GmbH"
+  description: Tag folders and files with the help of OpenAi. Requires an API token from OpenAi.
+
+  settings: package_settings.py
+
+  icon:
+    path: "icons/replicate_logo.svg"
+
+  actions:
+    - ap::replicate::tagging
