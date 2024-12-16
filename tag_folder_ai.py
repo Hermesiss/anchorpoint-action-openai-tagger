@@ -12,14 +12,42 @@ import tiktoken
 
 prompt = (
     "Write tags for the folder: required game engines (if it has e.g. uasset or unitypackage) or 'All' if assets have common types, "
-    "content types (texture, sprite, model, vfx, sfx, etc.), and genres. "
-    "Use commas within categories and semicolons between categories"
+    "content types (texture, sprite, model, vfx, sfx, etc.), and detailed genres."
+    "Use commas within categories and semicolons between categories.\n"
     "Do not include any prefixes or additional text in the response, only the tags.\n"
-    "Example: \nUnity,Unreal Engine;3D Model,Texture,Sprite;Action,Adventure,RPG,Lowpoly\n")
-output_token_count = 50
+    "Example: \nUnity,Unreal Engine;3D Model,Texture,Sprite,Animated;Action,Adventure,RPG,Lowpoly,Metal,Steampunk,\n")
+output_token_count = 100
 input_token_price = 0.00000015
 output_token_price = 0.00000016
 proceed_dialog: ap.Dialog
+
+engines_variants = [
+    ["Unity", "Unity3D", "Unity Engine"],
+    ["Unreal Engine", "UE4", "UE5", "Unreal", "UE"],
+    ["Godot", "Godot Engine"],
+]
+
+types_variants = [
+    ["3D Model", "3D Models", "Model", "Models"],
+    ["Texture", "Textures"],
+    ["Sprite", "Sprites"],
+    ["Animated", "Animation", "Animations"],
+    [
+        "VFX", "Visual Effects", "Visual Effect", "Effects", "Effect", "FX", "Visuals", "Visual", "Special Effects",
+        "Special Effect"
+    ],
+    ["SFX", "Sound Effects", "Sound Effect", "Sound FX"],
+    ["Soundtrack", "OST"],
+    ["Voiceover", "VO", "Voice Over", "Voice"],
+]
+
+genres_variants: list[list[str]] = []
+
+all_variants = {
+    "AI-Engines": engines_variants,
+    "AI-Types": types_variants,
+    "AI-Genres": genres_variants,
+}
 
 
 def get_folder_structure(input_path) -> dict[Any, list[Any]]:
@@ -70,15 +98,15 @@ def tag_folders(workspace_id: str, input_paths: list[str], database: aps.Api, at
                             f"\nOutput token count: ~{combined_output_tokens}"
                             f"\nPrice: ~${combined_input_price + combined_output_price}"
                             f"\n\nProceed?")
-    proceed_dialog.add_button("OK",
-                              callback=lambda d: proceed_callback(folders, workspace_id, database,
-                                                                  attributes))
+    proceed_dialog.add_button(
+        "OK", callback=lambda d: proceed_callback(folders, workspace_id, database, attributes))
     proceed_dialog.add_button("Cancel", callback=lambda d: d.close(), primary=False)
     proceed_dialog.show()
 
 
-def proceed_callback(folders: list[tuple[str, str, int, float]], workspace_id: str, database: aps.Api,
-                     attributes: list[aps.Attribute]):
+def proceed_callback(
+        folders: list[tuple[str, str, int, float]], workspace_id: str, database: aps.Api,
+        attributes: list[aps.Attribute]):
     proceed_dialog.close()
 
     def run():
@@ -101,7 +129,7 @@ def get_openai_response(in_prompt, model="gpt-4o-mini"):
             messages=[
                 {"role": "user", "content": in_prompt}
             ],
-            max_tokens=50,
+            max_tokens=100,
         )
         # Extract and return the response content
         return response.choices[0].message.content.strip()
@@ -109,31 +137,51 @@ def get_openai_response(in_prompt, model="gpt-4o-mini"):
         return f"Error: {e}"
 
 
-def tag_folder(full_prompt: str, input_path: str, workspace_id: str, database: aps.Api,
-               attributes: list[aps.Attribute]):
+def replace_tag(tag: str, variants: list[list[str]]) -> str:
+    if not variants:
+        return tag
+    for variant in variants:
+        if tag in variant:
+            return variant[0]
+
+    return tag
+
+
+def tag_folder(
+        full_prompt: str, input_path: str, workspace_id: str, database: aps.Api,
+        attributes: list[aps.Attribute]):
     response = get_openai_response(full_prompt)
     print(response)
 
     tags = response.split(";")
     if len(tags) != len(attributes):
-        ap.UI().show_error("Error",
-                           f"The number of categories ({len(tags)}) does not match the number of attributes ({len(attributes)})")
+        ap.UI().show_error(
+            "Error",
+            f"The number of categories ({len(tags)}) does not match the number of attributes ({len(attributes)})")
         return
 
     for i, tag in enumerate(tags):
         attribute = attributes[i]
         anchorpoint_tags = attribute.tags
 
-        colors = ["grey", "blue", "purple", "green",
-                  "turk", "orange", "yellow", "red"]
+        colors = [
+            "grey", "blue", "purple", "green",
+            "turk", "orange", "yellow", "red"]
 
         # Create a set of anchorpoint tag names for faster lookup
         anchorpoint_tag_names = {tag.name for tag in anchorpoint_tags}
 
         # Add new tags from image_tags that are not already in anchorpoint_tag_names
         folder_tags = tag.split(",")
+        replaced_tags = []
+
         for folder_tag in folder_tags:
-            folder_tag = folder_tag.strip()
+            tag = replace_tag(folder_tag.strip(), all_variants[attribute.name])
+            if not tag in replaced_tags:
+                replaced_tags.append(tag)
+
+        for folder_tag in replaced_tags:
+            folder_tag = folder_tag
             if folder_tag not in anchorpoint_tag_names:
                 new_tag = aps.AttributeTag(folder_tag, random.choice(colors))
                 anchorpoint_tags.append(new_tag)
@@ -143,7 +191,7 @@ def tag_folder(full_prompt: str, input_path: str, workspace_id: str, database: a
 
         ao_tags = aps.AttributeTagList()
         for anchorpoint_tag in anchorpoint_tags:
-            if anchorpoint_tag.name in folder_tags:
+            if anchorpoint_tag.name in replaced_tags:
                 ao_tags.append(anchorpoint_tag)
 
         # Set the attribute value for the input path
@@ -173,8 +221,9 @@ def main():
     if len(selected_folders) == 0:
         selected_folders = [ctx.path]
 
-    ctx.run_async(tag_folders, ctx.workspace_id,
-                  selected_folders, database, attributes)
+    ctx.run_async(
+        tag_folders, ctx.workspace_id,
+        selected_folders, database, attributes)
 
 
 if __name__ == "__main__":
