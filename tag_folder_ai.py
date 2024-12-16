@@ -37,7 +37,7 @@ def count_tokens(in_prompt, model="gpt-4o-mini"):
 
 
 def tag_folders(workspace_id: str, input_paths: list[str], database: aps.Api, attributes: list[aps.Attribute]):
-    progress = ap.Progress("Collecting folders", "Processing", infinite=True)
+    folders = []
 
     for input_path in input_paths:
         if os.path.isdir(input_path):
@@ -52,22 +52,45 @@ def tag_folders(workspace_id: str, input_paths: list[str], database: aps.Api, at
             print(full_prompt)
             token_count = count_tokens(full_prompt)
             input_price = token_count * input_token_price
-            output_price = output_token_count * output_token_price
-            global proceed_dialog
-            proceed_dialog = ap.Dialog()
-            proceed_dialog.title = "AI Tags"
-            proceed_dialog.add_text(f"Path {input_path}"
-                                    f"\nInput token count: {token_count}"
-                                    f"\nOutput token count: ~{output_token_count}"
-                                    f"\nPrice: ~${input_price + output_price}"
-                                    f"\n\nProceed?")
-            proceed_dialog.add_button("OK",
-                                      callback=lambda d: tag_folder(full_prompt, input_path, workspace_id, database,
-                                                                    attributes))
-            proceed_dialog.add_button("Cancel", callback=lambda d: d.close(), primary=False)
-            proceed_dialog.show()
+            folders.append((input_path, full_prompt, token_count, input_price))
 
-    progress.finish()
+    global proceed_dialog
+    proceed_dialog = ap.Dialog()
+    proceed_dialog.title = "AI Tags"
+    if len(folders) == 1:
+        proceed_dialog.title += " - " + os.path.basename(folders[0][0])
+    else:
+        proceed_dialog.title += f" - {len(folders)} folders"
+
+    combined_tokens = sum([folder[2] for folder in folders])
+    combined_output_tokens = len(folders) * output_token_count
+    combined_input_price = sum([folder[3] for folder in folders])
+    combined_output_price = combined_output_tokens * output_token_price
+    proceed_dialog.add_text(f"Input token count: {combined_tokens}"
+                            f"\nOutput token count: ~{combined_output_tokens}"
+                            f"\nPrice: ~${combined_input_price + combined_output_price}"
+                            f"\n\nProceed?")
+    proceed_dialog.add_button("OK",
+                              callback=lambda d: proceed_callback(folders, workspace_id, database,
+                                                                  attributes))
+    proceed_dialog.add_button("Cancel", callback=lambda d: d.close(), primary=False)
+    proceed_dialog.show()
+
+
+def proceed_callback(folders: list[tuple[str, str, int, float]], workspace_id: str, database: aps.Api,
+                     attributes: list[aps.Attribute]):
+    proceed_dialog.close()
+
+    def run():
+        progress = ap.Progress("Requesting AI tags", "Processing", infinite=False, show_loading_screen=True)
+        progress.report_progress(0)
+        for i, folder in enumerate(folders):
+            tag_folder(folder[1], folder[0], workspace_id, database, attributes)
+            progress.report_progress((i + 1) / len(folders))
+        progress.finish()
+
+    ctx = ap.get_context()
+    ctx.run_async(run)
 
 
 def get_openai_response(in_prompt, model="gpt-4o-mini"):
@@ -77,7 +100,8 @@ def get_openai_response(in_prompt, model="gpt-4o-mini"):
             model=model,
             messages=[
                 {"role": "user", "content": in_prompt}
-            ]
+            ],
+            max_tokens=50,
         )
         # Extract and return the response content
         return response.choices[0].message.content.strip()
@@ -87,10 +111,7 @@ def get_openai_response(in_prompt, model="gpt-4o-mini"):
 
 def tag_folder(full_prompt: str, input_path: str, workspace_id: str, database: aps.Api,
                attributes: list[aps.Attribute]):
-    proceed_dialog.close()
-    progress = ap.Progress("Requesting AI tags", "Processing", infinite=True)
     response = get_openai_response(full_prompt)
-    progress.finish()
     print(response)
 
     tags = response.split(";")
