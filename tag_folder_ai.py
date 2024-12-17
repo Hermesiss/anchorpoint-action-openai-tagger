@@ -66,22 +66,28 @@ def count_tokens(in_prompt, model="gpt-4o-mini"):
 
 def tag_folders(workspace_id: str, input_paths: list[str], database: aps.Api, attributes: list[aps.Attribute]):
     folders = []
+    progress = ap.Progress("Counting tokens", "Processing", infinite=False, show_loading_screen=True)
 
-    for input_path in input_paths:
+    total_steps = 3
+    for i, input_path in enumerate(input_paths):
         if os.path.isdir(input_path):
             folder_structure = get_folder_structure(input_path)
+            progress.report_progress(i / len(input_paths) + (1 / total_steps / len(input_paths)))
             folder_structure_str = str(folder_structure)
             folder_name = os.path.basename(input_path)
             # replace input_path with "root"
             folder_structure_str = folder_structure_str.replace(input_path, "root")
+            progress.report_progress(i / len(input_paths) + (2 / total_steps / len(input_paths)))
             print(folder_structure_str)
 
             full_prompt = f"{prompt}\nFolder name: {folder_name}\nFolder structure:\n{folder_structure_str}"
             print(full_prompt)
             token_count = count_tokens(full_prompt)
+            progress.report_progress(i / len(input_paths) + (3 / total_steps / len(input_paths)))
             input_price = token_count * input_token_price
             folders.append((input_path, full_prompt, token_count, input_price))
 
+    progress.finish()
     global proceed_dialog
     proceed_dialog = ap.Dialog()
     proceed_dialog.title = "AI Tags"
@@ -98,9 +104,11 @@ def tag_folders(workspace_id: str, input_paths: list[str], database: aps.Api, at
                             f"\nOutput token count: ~{combined_output_tokens}"
                             f"\nPrice: ~${combined_input_price + combined_output_price}"
                             f"\n\nProceed?")
-    proceed_dialog.add_button(
-        "OK", callback=lambda d: proceed_callback(folders, workspace_id, database, attributes))
-    proceed_dialog.add_button("Cancel", callback=lambda d: d.close(), primary=False)
+    (
+        proceed_dialog
+        .add_button("OK", callback=lambda d: proceed_callback(folders, workspace_id, database, attributes))
+        .add_button("Cancel", callback=lambda d: d.close(), primary=False)
+    )
     proceed_dialog.show()
 
 
@@ -127,6 +135,7 @@ def get_openai_response(in_prompt, model="gpt-4o-mini"):
         response = openai.chat.completions.create(
             model=model,
             messages=[
+                {"role": "system", "content": "You are a folder tagging AI."},
                 {"role": "user", "content": in_prompt}
             ],
             max_tokens=100,

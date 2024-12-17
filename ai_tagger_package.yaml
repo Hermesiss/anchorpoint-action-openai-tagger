@@ -11,11 +11,11 @@ action:
 
   #Optional Properties
   version: 1
-  id: "ht::package::ai_tagger"
+  id: "ap::package::ai_tagger"
   category: "ai"
   type: package
   enable: true
-  author: "Anchorpoint Software GmbH"
+  author: "Hermesis Trismegistus"
   description: Tag folders and files with the help of OpenAi. Requires an API token from OpenAi.
 
   settings: package_settings.py
@@ -24,4 +24,4 @@ action:
     path: "icons/replicate_logo.svg"
 
   actions:
-    - ap::replicate::tagging
+    - ap::ai_tagger::folder

@@ -9,7 +9,7 @@ action:
   name: "Tag Folder with AI"
 
   version: 1
-  id: "ht::ai_tagger::folder"
+  id: "ap::ai_tagger::folder"
   category: "ai"
   type: python
   author: "Hermesiss"
