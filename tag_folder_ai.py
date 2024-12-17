@@ -10,6 +10,14 @@ import openai
 
 import tiktoken
 
+local_settings = aps.Settings("ht_ai_tagger")
+open_api_key = local_settings.get("openai_api_key")
+if not open_api_key:
+    ap.UI().show_error("No API key", "Please set up an API key in the settings")
+    raise ValueError("No API key set")
+
+os.environ["OPENAI_API_KEY"] = open_api_key
+
 prompt = (
     "Write tags for the folder: required game engines (if it has e.g. uasset or unitypackage) or 'All' if assets have common types, "
     "content types (texture, sprite, model, vfx, sfx, etc.), and detailed genres."
@@ -41,7 +49,15 @@ types_variants = [
     ["Voiceover", "VO", "Voice Over", "Voice"],
 ]
 
-genres_variants: list[list[str]] = []
+genres_variants: list[list[str]] = [
+    ["8-Bit", "8-bit", "8 bit", "8bit"],
+    ["Pixel Art", "Pixel", "Pixelated", "Pixelation", "Pixelate", "Pixel Art Style"],
+    ["Lowpoly", "Low Poly", "Low-poly", "Low Polygons", "Low-Polygons", "Low Polygons Count", "Low-Polygons Count"],
+    ["RPG", "Role-Playing Game", "Role Playing Game", "Roleplay", "Roleplay Game"],
+    ["RTS", "Real-Time Strategy", "Real Time Strategy", "Realtime Strategy", "Realtime Strategy Game"],
+    ["FPS", "First-Person Shooter", "First Person Shooter", "First-Person", "First Person"],
+    ["Sci-Fi", "Science Fiction", "Science-Fiction", "SciFi", "Sci-Fi Game", "Science Fiction Game"],
+]
 
 all_variants = {
     "AI-Engines": engines_variants,

@@ -3,7 +3,7 @@
 #Environment Variables: e.g. ${MY_VARIABLE}
 #Full documentation: https://docs.anchorpoint.app/docs/actions/create-actions
 
-version: "1.0.1"
+version: "1.0"
 
 action:
   #Must Have Properties
