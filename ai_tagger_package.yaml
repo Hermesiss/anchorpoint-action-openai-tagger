@@ -25,3 +25,4 @@ action:
 
   actions:
     - ap::ai_tagger::folder
+    - ap::ai_tagger::file

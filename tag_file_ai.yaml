@@ -1,0 +1,30 @@
+# Anchorpoint Markup Language
+# Predefined Variables: e.g. ${path}
+# Environment Variables: e.g. ${MY_VARIABLE}
+# Full documentation: https://docs.anchorpoint.app/Actions/Reference
+
+version: 1.0
+
+action:
+  name: "Tag File with AI"
+
+  version: 1
+  id: "ap::ai_tagger::file"
+  category: "ai"
+  type: python
+  author: "Hermesiss"
+  description: "Creates Folder Tags with AI based on folder structure"
+  enable: true
+  icon:
+    path: icons/tagImage.svg
+
+  python_packages:
+  - tiktoken
+  - openai
+  - pillow
+
+  script: "tag_file_ai.py"
+
+  register:
+    file:
+      enable: true
