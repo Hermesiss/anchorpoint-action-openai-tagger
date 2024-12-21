@@ -6,7 +6,7 @@
 version: 1.0
 
 action:
-  name: "Tag File with AI"
+  name: "Tag File(s) with AI"
 
   version: 1
   id: "ap::ai_tagger::file"
@@ -27,4 +27,6 @@ action:
 
   register:
     file:
+      enable: true
+    folder:
       enable: true
