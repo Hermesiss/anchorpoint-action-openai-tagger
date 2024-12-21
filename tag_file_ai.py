@@ -345,6 +345,10 @@ def proceed_callback(workspace_id, database):
 
 
 def process_images(workspace_id, input_paths, database):
+    if len(input_paths) == 0:
+        ap.UI().show_error("No supported files selected", "Please select files to tag")
+        return
+
     # start progress
     progress = ap.Progress("Generating thumbnails", "Processing", infinite=False, show_loading_screen=True)
     # Loop through each input path
@@ -385,7 +389,8 @@ def process_images(workspace_id, input_paths, database):
     global proceed_dialog
     proceed_dialog = ap.Dialog()
     proceed_dialog.title = "AI Tags for files"
-    proceed_dialog.add_text(f"Input token count: {total_tokens}"
+    proceed_dialog.add_text(f"Processing files: {len(input_paths)}"
+                            f"\nInput token count: {total_tokens}"
                             f"\nOutput token count: ~{combined_output_tokens}"
                             f"\nPixel count: {pixel_count}"
                             f"\nPrice: ~${total_price}"
@@ -401,6 +406,44 @@ def process_images(workspace_id, input_paths, database):
 attributes = []
 
 
+def filter_ignored_extensions(files: list[str], ignored_ext: list[list[str]]) -> list[str]:
+    filtered_files = []
+    for file in files:
+        file_ext = file.split(".")[-1]
+        for ignored_extension in ignored_ext:
+            if file_ext in ignored_extension:
+                print(f"Ignoring file because of extension: {file}")
+                break
+        else:
+            filtered_files.append(file)
+
+    return filtered_files
+
+
+ignored_unity_extensions = [
+    "meta", "unity", "prefab", "asset", "mat", "controller", "anim", "mask",
+    "overrideController", "physicMaterial", "physicsMaterial2D", "renderTexture", "shader",
+    "cubemap", "flare", "giparams", "lightingData", "unitypackage"
+]
+ignored_unreal_extensions = [
+    "umap", "uplugin", "uproject", "uexp", "upk", "udk", "uc", "u", "udata", "uclass",
+    "ustruct", "ufunction", "uinterface", "uenum", "uproperty"
+]
+ignored_godot_extensions = [
+    "tscn", "tres", "import", "scn", "res", "gd", "gdc", "gdscript", "gdn"
+]
+ignored_temp_extensions = [
+    "tmp", "temp", "bak", "backup", "old", "cache", "log", "lock", "swp"
+]
+ignored_audio_extensions = [
+    "mp3", "wav", "ogg", "flac", "aiff", "aif", "wma", "m4a", "aac", "mid", "midi", "mod", "xm", "it", "s3m", "flp",
+]
+ignored_extensions = [
+    ignored_unity_extensions, ignored_unreal_extensions, ignored_godot_extensions,
+    ignored_temp_extensions, ignored_audio_extensions
+]
+
+
 def main():
     ctx = ap.get_context()
     database = ap.get_api()
@@ -412,7 +455,9 @@ def main():
     global attributes
     attributes = [types_attribute, genres_attribute, objects_attribute]
 
-    ctx.run_async(process_images, ctx.workspace_id, ctx.selected_files, database)
+    filtered_files = filter_ignored_extensions(ctx.selected_files, ignored_extensions)
+
+    ctx.run_async(process_images, ctx.workspace_id, filtered_files, database)
 
     return
 
