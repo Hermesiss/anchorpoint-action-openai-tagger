@@ -1,6 +1,6 @@
 import base64
 import json
-from typing import Any, Union
+from typing import Any, Union, Optional
 
 import anchorpoint as ap
 import apsync as aps
@@ -148,6 +148,13 @@ def create_temp_directory():
 
 
 def get_preview_image(workspace_id, input_path, output_folder):
+    existing_preview = aps.get_thumbnail(input_path, False)
+    if existing_preview:
+        print(f"Existing preview found: {existing_preview}")
+        return existing_preview
+
+    print(f"Existing preview not found for {input_path}, generating new one")
+
     file_hash = calculate_file_hash(input_path)
 
     # get the proper filename, rename it because the generated PNG file has a _pt appendix
@@ -163,7 +170,10 @@ def get_preview_image(workspace_id, input_path, output_folder):
             with_preview=True,
             workspace_id=workspace_id,
         )
+        print(f"Generated preview for {input_path}")
         os.rename(os.path.join(output_folder, f"{file_name}_pt.png"), image_path)
+    else:
+        print(f"Load cached preview for {input_path}")
 
     return image_path
 
@@ -183,10 +193,14 @@ def get_openai_response_images(in_prompt, image_paths: list[str], model="gpt-4o-
         uploads_base64.append(encode_image(image_path))
 
     try:
+        original_file_names = []
+        for image_path in image_paths:
+            original_file_names.append(original_files[image_path])
         content = [{
             "type": "text",
-            "text": "Please tag these images",
+            "text": "Please tag these images: " + ", ".join(original_file_names)
         }]
+        print(content)
         for upload in uploads_base64:
             content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{upload}"}, })
 
@@ -202,6 +216,7 @@ def get_openai_response_images(in_prompt, image_paths: list[str], model="gpt-4o-
             ],
             response_format=response_format
         )
+
         result = response.choices[0].message.content.strip()
         parsed = json.loads(result)
         return parsed['tags']
@@ -254,16 +269,18 @@ def check_or_update_attribute(attribute: aps.Attribute, tag: str, database: aps.
     raise ValueError(f"Tag {tag} not found in the attribute tags: {anchorpoint_tag_names}")
 
 
-def change_slices_to_skip(workspace_id, database):
+def change_slices_to_skip(database):
     new_previews = []
     prev_count = 0
 
     global previews_sliced
-    for previews in previews_sliced:
-        for preview in previews:
+    for p in previews_sliced:
+        for preview in p:
             original_file = original_files[preview]
             prev_count += 1
-            ai_types_attr: Union[aps.apsync.Attribute, str] = database.attributes.get_attribute_value(original_file, "AI-Types")
+            ai_types_attr: Union[aps.apsync.Attribute, str] = database.attributes.get_attribute_value(
+                original_file,
+                "AI-Types")
             if ai_types_attr and len(ai_types_attr) > 0:
                 continue
 
@@ -276,31 +293,31 @@ def change_slices_to_skip(workspace_id, database):
     previews_sliced = new_previews_sliced
 
 
-def proceed_callback(workspace_id, database):
+def proceed_callback(database):
     proceed_dialog.close()
     skip_existing_tags = proceed_dialog.get_value("skip_existing_tags")
     if skip_existing_tags:
-        change_slices_to_skip(workspace_id, database)
+        change_slices_to_skip(database)
 
     def run():
         progress = ap.Progress("Requesting AI tags", "Processing", infinite=False, show_loading_screen=True)
         progress.report_progress(0)
-        for i, previews in enumerate(previews_sliced):
-            response = get_openai_response_images(prompt, previews)
+        for i, p in enumerate(previews_sliced):
+            response = get_openai_response_images(prompt, p)
             progress.report_progress((i + 1) / len(previews_sliced))
             print(response)
-            if len(response) < len(previews):
+            if len(response) < len(p):
                 ap.UI().navigate_to_folder(initial_folder)
                 ap.UI().show_error("Error",
-                                   f"Not all images were tagged [Received {len(response)}, requested {len(previews)}]")
-                raise ValueError(f"Not all images were tagged [Received {len(response)}, requested {len(previews)}]")
+                                   f"Not all images were tagged [Received {len(response)}, requested {len(p)}]")
+                raise ValueError(f"Not all images were tagged [Received {len(response)}, requested {len(p)}]")
 
             progress2 = ap.Progress("Updating tags", "Processing", infinite=False, show_loading_screen=True)
-            for j, preview in enumerate(previews):
-                progress2.report_progress(j / len(previews))
+            for j, preview in enumerate(p):
+                progress2.report_progress(j / len(p))
                 tags = response[j]
 
-                ap.UI().navigate_to_folder(os.path.dirname(original_files[previews[j]]))
+                ap.UI().navigate_to_folder(os.path.dirname(original_files[p[j]]))
 
                 types = tags["types"]
                 types_tags = aps.AttributeTagList()
@@ -309,7 +326,7 @@ def proceed_callback(workspace_id, database):
                     new_tag = check_or_update_attribute(attributes[0], types[k], database)
                     types_tags.append(new_tag)
 
-                database.attributes.set_attribute_value(original_files[previews[j]], "AI-Types", types_tags)
+                database.attributes.set_attribute_value(original_files[p[j]], "AI-Types", types_tags)
 
                 genres = tags["genres"]
                 genres_tags = aps.AttributeTagList()
@@ -322,14 +339,14 @@ def proceed_callback(workspace_id, database):
                 objects = tags["objects"]
                 objects_tags = aps.AttributeTagList()
 
-                database.attributes.set_attribute_value(original_files[previews[j]], "AI-Genres", genres_tags)
+                database.attributes.set_attribute_value(original_files[p[j]], "AI-Genres", genres_tags)
 
                 for k, tag in enumerate(objects):
                     objects[k] = replace_tag(tag, all_variants["AI-Objects"])
                     new_tag = check_or_update_attribute(attributes[2], objects[k], database)
                     objects_tags.append(new_tag)
 
-                database.attributes.set_attribute_value(original_files[previews[j]], "AI-Objects", objects_tags)
+                database.attributes.set_attribute_value(original_files[p[j]], "AI-Objects", objects_tags)
             progress2.finish()
 
         progress.finish()
@@ -339,7 +356,31 @@ def proceed_callback(workspace_id, database):
     ctx.run_async(run)
 
 
-def process_images(workspace_id, input_paths, database):
+previews = []
+file_input_paths = []
+last_index = -1
+generating_previews_count = 0
+generating_previews_progress: Optional[ap.Progress] = None
+ap_context: Optional[ap.Context] = None
+
+
+def proceed_generating_previews(workspace_id, database, output_folder):
+    if generating_previews_count > len(file_input_paths):
+        return
+
+    if generating_previews_count == len(file_input_paths):
+        finish_generating_previews(previews, database)
+        return
+
+    if last_index >= len(file_input_paths) - 1:
+        return
+
+    input_path = file_input_paths[last_index + 1]
+    generate_preview_async(workspace_id, input_path, output_folder, database)
+    # ap_context.run_async(generate_preview_async, workspace_id, input_path, output_folder, database)
+
+
+def generate_previews(workspace_id, input_paths, database):
     if len(input_paths) == 0:
         ap.UI().navigate_to_folder(initial_folder)
         ap.UI().show_error("No supported files selected", "Please select files to tag")
@@ -347,25 +388,64 @@ def process_images(workspace_id, input_paths, database):
         return
 
     # start progress
-    progress = ap.Progress("Generating previews", "Processing", infinite=False, show_loading_screen=True)
+    global generating_previews_progress
+    generating_previews_progress = ap.Progress(
+        "Generating previews", "Processing", infinite=False,
+        show_loading_screen=True)
     output_folder = create_temp_directory()
 
+    global previews
     previews = []
+    global file_input_paths
+    file_input_paths = input_paths
     print("Output folder: {}".format(output_folder.replace("\\", "\\\\")))
-    for i, input_path in enumerate(input_paths):
-        image_path = get_preview_image(workspace_id, input_path, output_folder)
-        previews.append(image_path)
-        original_files[image_path] = input_path
-        progress.report_progress(i / len(input_paths))
-    progress.finish()
+    global ap_context
+    ap_context = ap.get_context()
+    proceed_generating_previews(workspace_id, database, output_folder)
+    # start generating first 10 previews
+    for i in range(min(images_per_request, len(input_paths))):
+        input_path = input_paths[i]
+        ap_context.run_async(generate_preview_async, workspace_id, input_path, output_folder, database)
+
+
+def generate_preview_async(workspace_id, input_path, output_folder, database):
+    global last_index
+    if last_index >= len (file_input_paths) - 1:
+        return
+    last_index += 1
+    image_path = get_preview_image(workspace_id, input_path, output_folder)
+    previews.append(image_path)
+    original_files[image_path] = input_path
+
+    global generating_previews_count
+    generating_previews_count += 1
+
+    generating_previews_progress.report_progress(generating_previews_count / len(file_input_paths))
+    proceed_generating_previews(workspace_id, database, output_folder)
+
+
+def finish_generating_previews(input_paths, database):
+    generating_previews_progress.finish()
+    print(f"Finished generating previews for {len(input_paths)} files")
+    process_images(input_paths, database)
+
+
+def process_images(input_paths, database):
     # calculate pixel count
     pixel_count = 0
+    asset_names = []
     progress = ap.Progress("Calculating pixel count", "Processing", infinite=False, show_loading_screen=True)
     for i, preview_path in enumerate(previews):
         image = Image.open(preview_path)
         width, height = image.size
+        if width > 256 or height > 256:
+            # resize image
+            image.thumbnail((256, 256))
+            image.save(preview_path)
+            width, height = image.size
         pixel_count += width * height
         progress.report_progress(i / len(previews))
+        asset_names.append(os.path.basename(original_files[preview_path]))
 
     global previews_sliced
     # slice previews by images_per_request
@@ -376,7 +456,7 @@ def process_images(workspace_id, input_paths, database):
     print(f"Pixel count: {pixel_count}")
     print(f"Pixel price: {pixel_price}")
     progress.finish()
-    token_count = count_tokens(prompt)
+    token_count = count_tokens(prompt + ", ".join(asset_names))
     total_tokens = token_count * len(previews_sliced)
     combined_output_tokens = len(previews) * output_token_count
 
@@ -394,7 +474,7 @@ def process_images(workspace_id, input_paths, database):
     proceed_dialog.add_checkbox(False, None, var="skip_existing_tags").add_text("Skip existing tags")
     (
         proceed_dialog
-        .add_button("OK", callback=lambda d: proceed_callback(workspace_id, database))
+        .add_button("OK", callback=lambda d: proceed_callback(database))
         .add_button("Cancel", callback=lambda d: d.close(), primary=False)
     )
     proceed_dialog.show()
@@ -481,8 +561,7 @@ def main():
     global initial_folder
     initial_folder = ctx.path
 
-    ctx.run_async(process_images, ctx.workspace_id, filtered_files, database)
-
+    ctx.run_async(generate_previews, ctx.workspace_id, filtered_files, database)
     return
 
 
