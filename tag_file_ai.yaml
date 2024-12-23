@@ -28,5 +28,5 @@ action:
   register:
     file:
       enable: true
-#    folder: # Uncomment when all bugs with folder tagging are fixed
-#      enable: true
+    folder: # Uncomment when all bugs with folder tagging are fixed
+      enable: true

@@ -148,19 +148,23 @@ def create_temp_directory():
 
 
 def get_preview_image(workspace_id, input_path, output_folder):
-    existing_preview = aps.get_thumbnail(input_path, False)
-    if existing_preview:
-        print(f"Existing preview found: {existing_preview}")
-        return existing_preview
-
-    print(f"Existing preview not found for {input_path}, generating new one")
-
     file_hash = calculate_file_hash(input_path)
 
     # get the proper filename, rename it because the generated PNG file has a _pt appendix
     file_name = os.path.basename(input_path).split(".")[0]
 
     image_path = os.path.join(output_folder, f"{file_name}_{file_hash}_pt.png")
+
+    existing_preview = aps.get_thumbnail(input_path, False)
+    if existing_preview:
+        # copy the existing preview to the output folder because we can not modify the existing preview
+        if not os.path.exists(image_path):
+            os.makedirs(output_folder, exist_ok=True)
+            os.rename(existing_preview, image_path)
+        print(f"Existing preview found: {existing_preview}\nCopying to {image_path}")
+        return existing_preview
+
+    print(f"Existing preview not found for {input_path}, generating new one")
 
     if not os.path.exists(image_path):
         aps.generate_thumbnails(
@@ -204,6 +208,9 @@ def get_openai_response_images(in_prompt, image_paths: list[str], model="gpt-4o-
         for upload in uploads_base64:
             content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{upload}"}, })
 
+        openai_progress = ap.Progress("Communicating with OpenAI API", "Processing", infinite=True,
+                                      show_loading_screen=True)
+
         response = client.chat.completions.create(
             model=model,
             messages=[
@@ -216,6 +223,8 @@ def get_openai_response_images(in_prompt, image_paths: list[str], model="gpt-4o-
             ],
             response_format=response_format
         )
+
+        openai_progress.finish()
 
         result = response.choices[0].message.content.strip()
         parsed = json.loads(result)
@@ -300,12 +309,16 @@ def proceed_callback(database):
         change_slices_to_skip(database)
 
     def run():
-        progress = ap.Progress("Requesting AI tags", "Processing", infinite=False, show_loading_screen=True)
+        progress = ap.Progress(
+            "Requesting AI tags", "Processing", infinite=False, show_loading_screen=True, cancelable=True)
         global start_time
         start_time = datetime.now()
         print(f"Started tagging {len(previews_sliced)} previews")
         progress.report_progress(0)
         for i, p in enumerate(previews_sliced):
+            if progress.canceled:
+                progress.finish()
+                return
             response = get_openai_response_images(prompt, p)
             progress.report_progress((i + 1) / len(previews_sliced))
             print(response)
@@ -357,7 +370,6 @@ def proceed_callback(database):
         print(f"Finished tagging in {finish_time - start_time}")
         ap.UI().navigate_to_folder(initial_folder)
 
-    ctx = ap.get_context()
     ctx.run_async(run)
 
 
@@ -366,11 +378,16 @@ file_input_paths = []
 last_index = -1
 generating_previews_count = 0
 generating_previews_progress: Optional[ap.Progress] = None
-ap_context: Optional[ap.Context] = None
+cancel_generating_previews = False #hack
+ctx: Optional[ap.Context] = None
 start_time = datetime.now()
 
 
 def proceed_generating_previews(workspace_id, database, output_folder):
+    if cancel_generating_previews:
+        return
+    if generating_previews_progress.canceled:
+        return
     if generating_previews_count > len(file_input_paths):
         return
 
@@ -383,7 +400,7 @@ def proceed_generating_previews(workspace_id, database, output_folder):
 
     input_path = file_input_paths[last_index + 1]
     generate_preview_async(workspace_id, input_path, output_folder, database)
-    # ap_context.run_async(generate_preview_async, workspace_id, input_path, output_folder, database)
+    # ctx.run_async(generate_preview_async, workspace_id, input_path, output_folder, database)
 
 
 def generate_previews(workspace_id, input_paths, database):
@@ -401,7 +418,9 @@ def generate_previews(workspace_id, input_paths, database):
     global generating_previews_progress
     generating_previews_progress = ap.Progress(
         "Generating previews", "Processing", infinite=False,
-        show_loading_screen=True)
+        show_loading_screen=True,
+        cancelable=True)
+
     output_folder = create_temp_directory()
 
     global previews
@@ -409,13 +428,11 @@ def generate_previews(workspace_id, input_paths, database):
     global file_input_paths
     file_input_paths = input_paths
     print("Output folder: {}".format(output_folder.replace("\\", "\\\\")))
-    global ap_context
-    ap_context = ap.get_context()
     proceed_generating_previews(workspace_id, database, output_folder)
     # start generating first 10 previews
     for i in range(min(images_per_request, len(input_paths))):
         input_path = input_paths[i]
-        ap_context.run_async(generate_preview_async, workspace_id, input_path, output_folder, database)
+        ctx.run_async(generate_preview_async, workspace_id, input_path, output_folder, database)
 
 
 def generate_preview_async(workspace_id, input_path, output_folder, database):
@@ -423,23 +440,36 @@ def generate_preview_async(workspace_id, input_path, output_folder, database):
     if last_index >= len(file_input_paths) - 1:
         return
     last_index += 1
+    global cancel_generating_previews
+    if cancel_generating_previews:
+        return
     image_path = get_preview_image(workspace_id, input_path, output_folder)
     previews.append(image_path)
     original_files[image_path] = input_path
 
     global generating_previews_count
     generating_previews_count += 1
+    print(f"Progress cancelled: {generating_previews_progress.canceled}")
+    if generating_previews_progress.canceled:
+        cancel_generating_previews = True
+        generating_previews_progress.finish()
+        return
 
     generating_previews_progress.report_progress(generating_previews_count / len(file_input_paths))
     proceed_generating_previews(workspace_id, database, output_folder)
 
 
 def finish_generating_previews(input_paths, database):
+    if generating_previews_progress.canceled:
+        return
     generating_previews_progress.finish()
     print(f"Finished generating previews for {len(input_paths)} files")
     current_time = datetime.now()
     print(f"Generated {len(input_paths)} previews in {current_time - start_time}")
     process_images(input_paths, database)
+
+
+max_dimension = 128
 
 
 def process_images(input_paths, database):
@@ -456,9 +486,9 @@ def process_images(input_paths, database):
         image.save(preview_path)
 
         width, height = image.size
-        if width > 256 or height > 256:
+        if width > max_dimension or height > max_dimension:
             # resize image
-            image.thumbnail((256, 256))
+            image.thumbnail((max_dimension, max_dimension))
             image.save(preview_path)
             width, height = image.size
         pixel_count += width * height
@@ -489,7 +519,7 @@ def process_images(input_paths, database):
                             f"\nPixel count: {pixel_count}"
                             f"\nPrice: ~${total_price}"
                             f"\n\nProceed?")
-    proceed_dialog.add_checkbox(False, None, var="skip_existing_tags").add_text("Skip existing tags")
+    proceed_dialog.add_checkbox(True, None, var="skip_existing_tags").add_text("Skip existing tags")
     (
         proceed_dialog
         .add_button("OK", callback=lambda d: proceed_callback(database))
@@ -552,6 +582,7 @@ initial_folder = ""
 
 
 def main():
+    global ctx
     ctx = ap.get_context()
     database = ap.get_api()
     # Create or get the "AI Tags" attributes
