@@ -1,5 +1,6 @@
 import base64
 import json
+from datetime import datetime
 from typing import Any, Union, Optional
 
 import anchorpoint as ap
@@ -140,7 +141,6 @@ def encode_image(image_path):
 def create_temp_directory():
     # Create a temporary directory
     temp_dir_root = os.path.join(tempfile.gettempdir(), "anchorpoint", "ai_tagger", "previews")
-    print(f"Temp dir root: {temp_dir_root}")
     if not os.path.exists(temp_dir_root):
         os.makedirs(temp_dir_root)
 
@@ -195,7 +195,7 @@ def get_openai_response_images(in_prompt, image_paths: list[str], model="gpt-4o-
     try:
         original_file_names = []
         for image_path in image_paths:
-            original_file_names.append(original_files[image_path])
+            original_file_names.append(os.path.basename(original_files[image_path]))
         content = [{
             "type": "text",
             "text": "Please tag these images: " + ", ".join(original_file_names)
@@ -301,6 +301,9 @@ def proceed_callback(database):
 
     def run():
         progress = ap.Progress("Requesting AI tags", "Processing", infinite=False, show_loading_screen=True)
+        global start_time
+        start_time = datetime.now()
+        print(f"Started tagging {len(previews_sliced)} previews")
         progress.report_progress(0)
         for i, p in enumerate(previews_sliced):
             response = get_openai_response_images(prompt, p)
@@ -308,8 +311,8 @@ def proceed_callback(database):
             print(response)
             if len(response) < len(p):
                 ap.UI().navigate_to_folder(initial_folder)
-                ap.UI().show_error("Error",
-                                   f"Not all images were tagged [Received {len(response)}, requested {len(p)}]")
+                ap.UI().show_error(
+                    "Error", f"Not all images were tagged [Received {len(response)}, requested {len(p)}]")
                 raise ValueError(f"Not all images were tagged [Received {len(response)}, requested {len(p)}]")
 
             progress2 = ap.Progress("Updating tags", "Processing", infinite=False, show_loading_screen=True)
@@ -350,6 +353,8 @@ def proceed_callback(database):
             progress2.finish()
 
         progress.finish()
+        finish_time = datetime.now()
+        print(f"Finished tagging in {finish_time - start_time}")
         ap.UI().navigate_to_folder(initial_folder)
 
     ctx = ap.get_context()
@@ -362,6 +367,7 @@ last_index = -1
 generating_previews_count = 0
 generating_previews_progress: Optional[ap.Progress] = None
 ap_context: Optional[ap.Context] = None
+start_time = datetime.now()
 
 
 def proceed_generating_previews(workspace_id, database, output_folder):
@@ -387,6 +393,10 @@ def generate_previews(workspace_id, input_paths, database):
         print("No supported files selected")
         return
 
+    global start_time
+    start_time = datetime.now()
+    print(f"Started generating previews for {len(input_paths)} files")
+
     # start progress
     global generating_previews_progress
     generating_previews_progress = ap.Progress(
@@ -410,7 +420,7 @@ def generate_previews(workspace_id, input_paths, database):
 
 def generate_preview_async(workspace_id, input_path, output_folder, database):
     global last_index
-    if last_index >= len (file_input_paths) - 1:
+    if last_index >= len(file_input_paths) - 1:
         return
     last_index += 1
     image_path = get_preview_image(workspace_id, input_path, output_folder)
@@ -427,6 +437,8 @@ def generate_preview_async(workspace_id, input_path, output_folder, database):
 def finish_generating_previews(input_paths, database):
     generating_previews_progress.finish()
     print(f"Finished generating previews for {len(input_paths)} files")
+    current_time = datetime.now()
+    print(f"Generated {len(input_paths)} previews in {current_time - start_time}")
     process_images(input_paths, database)
 
 
