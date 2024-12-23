@@ -437,6 +437,12 @@ def process_images(input_paths, database):
     progress = ap.Progress("Calculating pixel count", "Processing", infinite=False, show_loading_screen=True)
     for i, preview_path in enumerate(previews):
         image = Image.open(preview_path)
+
+        # trim transparent pixels
+        box = image.getbbox()
+        image = image.crop(box)
+        image.save(preview_path)
+
         width, height = image.size
         if width > 256 or height > 256:
             # resize image
