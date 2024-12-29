@@ -4,19 +4,18 @@ from typing import Any
 import anchorpoint as ap
 import apsync as aps
 import os
-import tempfile
 import random
 import openai
 
-import tiktoken
+from ai.api import init_openai_key
+from ap_tools.dialogs import CreateTagFoldersDialogData, create_tag_folders_dialog
+from labels.attributes import ensure_attribute, replace_tag, attribute_colors
+from labels.variants import engines_variants, types_variants, genres_variants
 
-local_settings = aps.Settings("ht_ai_tagger")
-open_api_key = local_settings.get("openai_api_key")
-if not open_api_key:
-    ap.UI().show_error("No API key", "Please set up an API key in the settings")
-    raise ValueError("No API key set")
+from ai.constants import input_token_price, output_token_price
+from ai.tokens import count_tokens
 
-os.environ["OPENAI_API_KEY"] = open_api_key
+init_openai_key()
 
 prompt = (
     "Write tags for the folder: required game engines (if it has e.g. uasset or unitypackage) or 'All' if assets have common types, "
@@ -25,39 +24,8 @@ prompt = (
     "Do not include any prefixes or additional text in the response, only the tags.\n"
     "Example: \nUnity,Unreal Engine;3D Model,Texture,Sprite,Animated;Action,Adventure,RPG,Lowpoly,Metal,Steampunk,\n")
 output_token_count = 100
-input_token_price = 0.00000015
-output_token_price = 0.00000016
+
 proceed_dialog: ap.Dialog
-
-engines_variants = [
-    ["Unity", "Unity3D", "Unity Engine"],
-    ["Unreal Engine", "UE4", "UE5", "Unreal", "UE"],
-    ["Godot", "Godot Engine"],
-]
-
-types_variants = [
-    ["3D Model", "3D Models", "Model", "Models"],
-    ["Texture", "Textures"],
-    ["Sprite", "Sprites"],
-    ["Animated", "Animation", "Animations"],
-    [
-        "VFX", "Visual Effects", "Visual Effect", "Effects", "Effect", "FX", "Visuals", "Visual", "Special Effects",
-        "Special Effect"
-    ],
-    ["SFX", "Sound Effects", "Sound Effect", "Sound FX"],
-    ["Soundtrack", "OST"],
-    ["Voiceover", "VO", "Voice Over", "Voice"],
-]
-
-genres_variants: list[list[str]] = [
-    ["8-Bit", "8-bit", "8 bit", "8bit"],
-    ["Pixel Art", "Pixel", "Pixelated", "Pixelation", "Pixelate", "Pixel Art Style"],
-    ["Lowpoly", "Low Poly", "Low-poly", "Low Polygons", "Low-Polygons", "Low Polygons Count", "Low-Polygons Count"],
-    ["RPG", "Role-Playing Game", "Role Playing Game", "Roleplay", "Roleplay Game"],
-    ["RTS", "Real-Time Strategy", "Real Time Strategy", "Realtime Strategy", "Realtime Strategy Game"],
-    ["FPS", "First-Person Shooter", "First Person Shooter", "First-Person", "First Person"],
-    ["Sci-Fi", "Science Fiction", "Science-Fiction", "SciFi", "Sci-Fi Game", "Science Fiction Game"],
-]
 
 all_variants = {
     "AI-Engines": engines_variants,
@@ -72,12 +40,6 @@ def get_folder_structure(input_path) -> dict[Any, list[Any]]:
         folder_structure[root] = files
 
     return folder_structure
-
-
-def count_tokens(in_prompt, model="gpt-4o-mini"):
-    encoding = tiktoken.encoding_for_model(model)
-    tokens = encoding.encode(in_prompt)
-    return len(tokens)
 
 
 def tag_folders(workspace_id: str, input_paths: list[str], database: aps.Api, attributes: list[aps.Attribute]):
@@ -105,26 +67,10 @@ def tag_folders(workspace_id: str, input_paths: list[str], database: aps.Api, at
 
     progress.finish()
     global proceed_dialog
-    proceed_dialog = ap.Dialog()
-    proceed_dialog.title = "AI Tags"
-    if len(folders) == 1:
-        proceed_dialog.title += " - " + os.path.basename(folders[0][0])
-    else:
-        proceed_dialog.title += f" - {len(folders)} folders"
-
-    combined_tokens = sum([folder[2] for folder in folders])
-    combined_output_tokens = len(folders) * output_token_count
-    combined_input_price = sum([folder[3] for folder in folders])
-    combined_output_price = combined_output_tokens * output_token_price
-    proceed_dialog.add_text(f"Input token count: {combined_tokens}"
-                            f"\nOutput token count: ~{combined_output_tokens}"
-                            f"\nPrice: ~${combined_input_price + combined_output_price}"
-                            f"\n\nProceed?")
-    (
-        proceed_dialog
-        .add_button("OK", callback=lambda d: proceed_callback(folders, workspace_id, database, attributes))
-        .add_button("Cancel", callback=lambda d: d.close(), primary=False)
-    )
+    data = CreateTagFoldersDialogData(folders, output_token_count, output_token_price)
+    proceed_dialog = create_tag_folders_dialog(
+        data,
+        lambda d: proceed_callback(folders, workspace_id, database, attributes))
     proceed_dialog.show()
 
 
@@ -162,16 +108,6 @@ def get_openai_response(in_prompt, model="gpt-4o-mini"):
         return f"Error: {e}"
 
 
-def replace_tag(tag: str, variants: list[list[str]]) -> str:
-    if not variants:
-        return tag
-    for variant in variants:
-        if tag in variant:
-            return variant[0]
-
-    return tag
-
-
 def tag_folder(
         full_prompt: str, input_path: str, workspace_id: str, database: aps.Api,
         attributes: list[aps.Attribute]):
@@ -189,9 +125,7 @@ def tag_folder(
         attribute = attributes[i]
         anchorpoint_tags = attribute.tags
 
-        colors = [
-            "grey", "blue", "purple", "green",
-            "turk", "orange", "yellow", "red"]
+        colors = attribute_colors
 
         # Create a set of anchorpoint tag names for faster lookup
         anchorpoint_tag_names = {tag.name for tag in anchorpoint_tags}
@@ -223,19 +157,9 @@ def tag_folder(
         database.attributes.set_attribute_value(input_path, attribute, ao_tags)
 
 
-def ensure_attribute(database: aps.Api, attribute_name: str) -> aps.Attribute:
-    attribute = database.attributes.get_attribute(attribute_name)
-    if not attribute:
-        attribute = database.attributes.create_attribute(
-            attribute_name, aps.AttributeType.multiple_choice_tag
-        )
-    return attribute
-
-
 def main():
     ctx = ap.get_context()
     database = ap.get_api()
-    # Create or get the "AI Tags" attribute
     engines_attribute = ensure_attribute(database, "AI-Engines")
     types_attribute = ensure_attribute(database, "AI-Types")
     genres_attribute = ensure_attribute(database, "AI-Genres")

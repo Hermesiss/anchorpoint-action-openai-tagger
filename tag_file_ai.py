@@ -11,17 +11,16 @@ import random
 import openai
 import hashlib
 
-import tiktoken
+from ai.api import init_openai_key
+from ap_tools.dialogs import CreateTagFilesDialogData, create_tag_files_dialog
+from image.resize import resize_image
+from labels.attributes import ensure_attribute, replace_tag, attribute_colors
+from labels.extensions import unity_extensions, unreal_extensions, audio_extensions, temp_extensions, godot_extensions
+from labels.variants import engines_variants, types_variants, genres_variants, objects_variants
+from ai.constants import input_pixel_price, input_token_price, output_token_price
+from ai.tokens import count_tokens
 
-from PIL import Image
-
-local_settings = aps.Settings("ht_ai_tagger")
-open_api_key = local_settings.get("openai_api_key")
-if not open_api_key:
-    ap.UI().show_error("No API key", "Please set up an API key in the settings")
-    raise ValueError("No API key set")
-
-os.environ["OPENAI_API_KEY"] = open_api_key
+init_openai_key()
 
 client = openai.OpenAI()
 
@@ -30,45 +29,11 @@ prompt = (
     "content types (texture, sprite, model, vfx, sfx, etc.), detailed genres and objects in the image"
     "Fill all 3 categories for each image. "
     "Example: \n3D Model,Texture,Sprite,Animated;Action,Adventure,RPG,Lowpoly,Metal,Steampunk;Shovel,Potion,Armor")
+
 output_token_count = 100
-input_token_price = 0.00000015
-# $0.00765 for 1 million pixels
-input_pixel_price = 0.00765 / 1000000
-output_token_price = 0.00000016
+
 images_per_request = 10
 proceed_dialog: ap.Dialog
-
-engines_variants = [
-    ["Unity", "Unity3D", "Unity Engine"],
-    ["Unreal Engine", "UE4", "UE5", "Unreal", "UE"],
-    ["Godot", "Godot Engine"],
-]
-
-types_variants = [
-    ["3D Model", "3D Models", "Model", "Models"],
-    ["Texture", "Textures"],
-    ["Sprite", "Sprites"],
-    ["Animated", "Animation", "Animations"],
-    [
-        "VFX", "Visual Effects", "Visual Effect", "Effects", "Effect", "FX", "Visuals", "Visual", "Special Effects",
-        "Special Effect"
-    ],
-    ["SFX", "Sound Effects", "Sound Effect", "Sound FX"],
-    ["Soundtrack", "OST"],
-    ["Voiceover", "VO", "Voice Over", "Voice"],
-]
-
-genres_variants: list[list[str]] = [
-    ["8-Bit", "8-bit", "8 bit", "8bit"],
-    ["Pixel Art", "Pixel", "Pixelated", "Pixelation", "Pixelate", "Pixel Art Style"],
-    ["Lowpoly", "Low Poly", "Low-poly", "Low Polygons", "Low-Polygons", "Low Polygons Count", "Low-Polygons Count"],
-    ["RPG", "Role-Playing Game", "Role Playing Game", "Roleplay", "Roleplay Game"],
-    ["RTS", "Real-Time Strategy", "Real Time Strategy", "Realtime Strategy", "Realtime Strategy Game"],
-    ["FPS", "First-Person Shooter", "First Person Shooter", "First-Person", "First Person"],
-    ["Sci-Fi", "Science Fiction", "Science-Fiction", "SciFi", "Sci-Fi Game", "Science Fiction Game"],
-]
-
-objects_variants: list[list[str]] = []
 
 all_variants = {
     "AI-Engines": engines_variants,
@@ -182,12 +147,6 @@ def get_preview_image(workspace_id, input_path, output_folder):
     return image_path
 
 
-def count_tokens(in_prompt, model="gpt-4o-mini"):
-    encoding = tiktoken.encoding_for_model(model)
-    tokens = encoding.encode(in_prompt)
-    return len(tokens)
-
-
 def get_openai_response_images(in_prompt, image_paths: list[str], model="gpt-4o-mini") -> list[Any]:
     if len(image_paths) == 0 or len(image_paths) > images_per_request:
         raise ValueError(f"The number of images should be between 1 and {images_per_request}")
@@ -208,8 +167,11 @@ def get_openai_response_images(in_prompt, image_paths: list[str], model="gpt-4o-
         for upload in uploads_base64:
             content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{upload}"}, })
 
-        openai_progress = ap.Progress("Communicating with OpenAI API", "Processing", infinite=True,
-                                      show_loading_screen=True)
+        openai_progress = ap.Progress(
+            "Communicating with OpenAI API",
+            "Processing",
+            infinite=True,
+            show_loading_screen=True)
 
         response = client.chat.completions.create(
             model=model,
@@ -234,34 +196,13 @@ def get_openai_response_images(in_prompt, image_paths: list[str], model="gpt-4o-
         return []
 
 
-def replace_tag(tag: str, variants: list[list[str]]) -> str:
-    if not variants:
-        return tag
-    for variant in variants:
-        if tag in variant:
-            return variant[0]
-
-    return tag
-
-
-def ensure_attribute(database: aps.Api, attribute_name: str) -> aps.Attribute:
-    attribute = database.attributes.get_attribute(attribute_name)
-    if not attribute:
-        attribute = database.attributes.create_attribute(
-            attribute_name, aps.AttributeType.multiple_choice_tag
-        )
-    return attribute
-
-
 previews_sliced = []
 original_files: dict[str, str] = {}
 
 
 def check_or_update_attribute(attribute: aps.Attribute, tag: str, database: aps.Api):
     anchorpoint_tags = attribute.tags
-    colors = [
-        "grey", "blue", "purple", "green",
-        "turk", "orange", "yellow", "red"]
+    colors = attribute_colors
 
     # Create a set of anchorpoint tag names for faster lookup
     anchorpoint_tag_names = {a_tag.name for a_tag in anchorpoint_tags}
@@ -318,6 +259,7 @@ def proceed_callback(database):
         for i, p in enumerate(previews_sliced):
             if progress.canceled:
                 progress.finish()
+                ap.UI().navigate_to_folder(initial_folder)
                 return
             response = get_openai_response_images(prompt, p)
             progress.report_progress((i + 1) / len(previews_sliced))
@@ -333,7 +275,8 @@ def proceed_callback(database):
                 progress2.report_progress(j / len(p))
                 tags = response[j]
 
-                ap.UI().navigate_to_folder(os.path.dirname(original_files[p[j]]))
+                # ap.UI().navigate_to_folder(os.path.dirname(original_files[p[j]]))
+                ap.UI().navigate_to_file(original_files[p[j]])
 
                 types = tags["types"]
                 types_tags = aps.AttributeTagList()
@@ -378,7 +321,7 @@ file_input_paths = []
 last_index = -1
 generating_previews_count = 0
 generating_previews_progress: Optional[ap.Progress] = None
-cancel_generating_previews = False #hack
+cancel_generating_previews = False  # hack
 ctx: Optional[ap.Context] = None
 start_time = datetime.now()
 
@@ -453,6 +396,7 @@ def generate_preview_async(workspace_id, input_path, output_folder, database):
     if generating_previews_progress.canceled:
         cancel_generating_previews = True
         generating_previews_progress.finish()
+        ap.UI().navigate_to_folder(initial_folder)
         return
 
     generating_previews_progress.report_progress(generating_previews_count / len(file_input_paths))
@@ -478,19 +422,7 @@ def process_images(input_paths, database):
     asset_names = []
     progress = ap.Progress("Calculating pixel count", "Processing", infinite=False, show_loading_screen=True)
     for i, preview_path in enumerate(previews):
-        image = Image.open(preview_path)
-
-        # trim transparent pixels
-        box = image.getbbox()
-        image = image.crop(box)
-        image.save(preview_path)
-
-        width, height = image.size
-        if width > max_dimension or height > max_dimension:
-            # resize image
-            image.thumbnail((max_dimension, max_dimension))
-            image.save(preview_path)
-            width, height = image.size
+        [width, height] = resize_image(preview_path, max_dimension)
         pixel_count += width * height
         progress.report_progress(i / len(previews))
         asset_names.append(os.path.basename(original_files[preview_path]))
@@ -510,21 +442,9 @@ def process_images(input_paths, database):
 
     total_price = total_tokens * input_token_price + pixel_price + combined_output_tokens * output_token_price
 
+    data = CreateTagFilesDialogData(input_paths, total_tokens, combined_output_tokens, pixel_count, total_price)
     global proceed_dialog
-    proceed_dialog = ap.Dialog()
-    proceed_dialog.title = "AI Tags for files"
-    proceed_dialog.add_text(f"Processing files: {len(input_paths)}"
-                            f"\nInput token count: {total_tokens}"
-                            f"\nOutput token count: ~{combined_output_tokens}"
-                            f"\nPixel count: {pixel_count}"
-                            f"\nPrice: ~${total_price}"
-                            f"\n\nProceed?")
-    proceed_dialog.add_checkbox(True, None, var="skip_existing_tags").add_text("Skip existing tags")
-    (
-        proceed_dialog
-        .add_button("OK", callback=lambda d: proceed_callback(database))
-        .add_button("Cancel", callback=lambda d: d.close(), primary=False)
-    )
+    proceed_dialog = create_tag_files_dialog(data, lambda d: proceed_callback(database))
     proceed_dialog.show()
 
 
@@ -545,27 +465,9 @@ def filter_ignored_extensions(files: list[str], ignored_ext: list[list[str]]) ->
     return filtered_files
 
 
-ignored_unity_extensions = [
-    "meta", "unity", "prefab", "asset", "mat", "controller", "anim", "mask",
-    "overrideController", "physicMaterial", "physicsMaterial2D", "renderTexture", "shader",
-    "cubemap", "flare", "giparams", "lightingData", "unitypackage"
-]
-ignored_unreal_extensions = [
-    "umap", "uplugin", "uproject", "uexp", "upk", "udk", "uc", "u", "udata", "uclass",
-    "ustruct", "ufunction", "uinterface", "uenum", "uproperty"
-]
-ignored_godot_extensions = [
-    "tscn", "tres", "import", "scn", "res", "gd", "gdc", "gdscript", "gdn"
-]
-ignored_temp_extensions = [
-    "tmp", "temp", "bak", "backup", "old", "cache", "log", "lock", "swp"
-]
-ignored_audio_extensions = [
-    "mp3", "wav", "ogg", "flac", "aiff", "aif", "wma", "m4a", "aac", "mid", "midi", "mod", "xm", "it", "s3m", "flp",
-]
 ignored_extensions = [
-    ignored_unity_extensions, ignored_unreal_extensions, ignored_godot_extensions,
-    ignored_temp_extensions, ignored_audio_extensions
+    unity_extensions, unreal_extensions, godot_extensions,
+    temp_extensions, audio_extensions
 ]
 
 
@@ -600,6 +502,10 @@ def main():
     print(selected_folders)
 
     if len(selected_folders) > 0:
+        # TODO remove this after fixing the folder selection
+        ap.UI().show_error(
+            "Folders are experimental", "Please navigate inside the folder and change the view to List",
+            60000)
         for folder in selected_folders:
             inner_files = get_all_files_recursive(folder)
             print(inner_files)
@@ -608,7 +514,8 @@ def main():
     filtered_files = filter_ignored_extensions(selected_files, ignored_extensions)
 
     global initial_folder
-    initial_folder = ctx.path
+    initial_folder = os.path.dirname(ctx.path)
+    print(f"Initial folder: {initial_folder}")
 
     ctx.run_async(generate_previews, ctx.workspace_id, filtered_files, database)
     return

@@ -6,7 +6,7 @@
 version: 1.0
 
 action:
-  name: "Tag File(s) with AI"
+  name: "Tag Files with AI"
 
   version: 1
   id: "ap::ai_tagger::file"
