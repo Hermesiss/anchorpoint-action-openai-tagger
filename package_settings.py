@@ -25,7 +25,7 @@ def main():
     if ctx.icon:
         dialog.icon = ctx.icon
 
-    dialog.add_text("<b>API Token</b>")
+    dialog.add_text("<b>OpenAI API Key</b>")
 
     try:
         token = local_settings.get("openai_api_key")

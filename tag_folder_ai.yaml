@@ -6,7 +6,7 @@
 version: 1.0
 
 action:
-  name: "Tag Folder with AI"
+  name: "Tag Folders with AI"
 
   version: 1
   id: "ap::ai_tagger::folder"
