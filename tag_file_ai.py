@@ -8,10 +8,11 @@ import apsync as aps
 import os
 import tempfile
 import random
-import openai
 import hashlib
 
-from ai.api import init_openai_key
+import requests
+
+from ai.api import init_openai_key, OPENAI_API_URL
 from ap_tools.dialogs import CreateTagFilesDialogData, create_tag_files_dialog
 from image.resize import resize_image
 from labels.attributes import ensure_attribute, replace_tag, attribute_colors
@@ -19,10 +20,6 @@ from labels.extensions import unity_extensions, unreal_extensions, audio_extensi
 from labels.variants import engines_variants, types_variants, genres_variants, objects_variants
 from ai.constants import input_pixel_price, input_token_price, output_token_price
 from ai.tokens import count_tokens
-
-init_openai_key()
-
-client = openai.OpenAI()
 
 prompt = (
     "You are a file tagging AI. When asked, write tags for each file in the order they were presented: "
@@ -146,55 +143,53 @@ def get_preview_image(workspace_id, input_path, output_folder):
 
     return image_path
 
+OPENAI_API_KEY = init_openai_key()
 
 def get_openai_response_images(in_prompt, image_paths: list[str], model="gpt-4o-mini") -> list[Any]:
     if len(image_paths) == 0 or len(image_paths) > images_per_request:
         raise ValueError(f"The number of images should be between 1 and {images_per_request}")
 
-    uploads_base64 = []
-    for image_path in image_paths:
-        uploads_base64.append(encode_image(image_path))
+    uploads_base64 = [encode_image(image_path) for image_path in image_paths]
+    original_file_names = [os.path.basename(image_path) for image_path in image_paths]
+
+    content = [{
+        "type": "text",
+        "text": "Please tag these images: " + ", ".join(original_file_names)
+    }]
+    for upload in uploads_base64:
+        content.append({
+            "type": "image_url",
+            "image_url": {"url": f"data:image/jpeg;base64,{upload}"}
+        })
+
+    headers = {
+        "Authorization": f"Bearer {OPENAI_API_KEY}",
+        "Content-Type": "application/json"
+    }
+
+    payload = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": in_prompt},
+            {"role": "user", "content": content}
+        ],
+        "response_format": response_format
+    }
 
     try:
-        original_file_names = []
-        for image_path in image_paths:
-            original_file_names.append(os.path.basename(original_files[image_path]))
-        content = [{
-            "type": "text",
-            "text": "Please tag these images: " + ", ".join(original_file_names)
-        }]
-        print(content)
-        for upload in uploads_base64:
-            content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{upload}"}, })
+        response = requests.post(OPENAI_API_URL, headers=headers, json=payload)
+        response.raise_for_status()
+        result = response.json()
 
-        openai_progress = ap.Progress(
-            "Communicating with OpenAI API",
-            "Processing",
-            infinite=True,
-            show_loading_screen=True)
-
-        response = client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": in_prompt},
-                {
-
-                    "role": "user",
-                    "content": content
-                }
-            ],
-            response_format=response_format
-        )
-
-        openai_progress.finish()
-
-        result = response.choices[0].message.content.strip()
-        parsed = json.loads(result)
-        return parsed['tags']
-    except openai.OpenAIError as e:
-        print(f"Error: {e}")
+        result_content = result.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
+        parsed = json.loads(result_content)
+        return parsed.get("tags", [])
+    except requests.exceptions.RequestException as e:
+        print(f"Request error: {e}")
         return []
-
+    except json.JSONDecodeError:
+        print("Failed to parse the response")
+        return []
 
 previews_sliced = []
 original_files: dict[str, str] = {}

@@ -10,7 +10,7 @@ action:
   name: "AI Folder and File Tools"
 
   #Optional Properties
-  version: 1
+  version: 2
   id: "ap::package::ai_tagger"
   category: "ai"
   type: package

@@ -20,7 +20,6 @@ action:
 
   python_packages:
   - tiktoken
-  - openai
 
   script: "tag_folder_ai.py"
 

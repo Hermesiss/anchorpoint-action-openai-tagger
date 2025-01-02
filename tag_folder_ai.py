@@ -5,17 +5,16 @@ import anchorpoint as ap
 import apsync as aps
 import os
 import random
-import openai
 
-from ai.api import init_openai_key
+import requests
+
+from ai.api import init_openai_key, OPENAI_API_URL
 from ap_tools.dialogs import CreateTagFoldersDialogData, create_tag_folders_dialog
 from labels.attributes import ensure_attribute, replace_tag, attribute_colors
 from labels.variants import engines_variants, types_variants, genres_variants
 
 from ai.constants import input_token_price, output_token_price
 from ai.tokens import count_tokens
-
-init_openai_key()
 
 prompt = (
     "Write tags for the folder: required game engines (if it has e.g. uasset or unitypackage) or 'All' if assets have common types, "
@@ -91,21 +90,32 @@ def proceed_callback(
     ctx.run_async(run)
 
 
+OPENAI_API_KEY = init_openai_key()
+
 def get_openai_response(in_prompt, model="gpt-4o-mini"):
+    headers = {
+        "Authorization": f"Bearer {OPENAI_API_KEY}",
+        "Content-Type": "application/json"
+    }
+
+    payload = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": "You are a folder tagging AI."},
+            {"role": "user", "content": in_prompt}
+        ],
+        "max_tokens": 100
+    }
+
     try:
-        # Create a chat completion request
-        response = openai.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": "You are a folder tagging AI."},
-                {"role": "user", "content": in_prompt}
-            ],
-            max_tokens=100,
-        )
-        # Extract and return the response content
-        return response.choices[0].message.content.strip()
-    except openai.OpenAIError as e:
-        return f"Error: {e}"
+        response = requests.post(OPENAI_API_URL, headers=headers, json=payload)
+        response.raise_for_status()
+        result = response.json()
+        return result["choices"][0]["message"]["content"].strip()
+    except requests.exceptions.RequestException as e:
+        return f"Request error: {e}"
+    except KeyError:
+        return "Unexpected response structure"
 
 
 def tag_folder(
