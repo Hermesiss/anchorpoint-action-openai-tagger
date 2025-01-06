@@ -173,16 +173,20 @@ def tag_folder(
 
 
 def main():
-    if not settings.any_folder_tags_selected():
-        ap.UI().show_error("No tags selected", "Please select at least one tag category in the settings")
-        return
+    # if not settings.any_folder_tags_selected():
+    #     ap.UI().show_error("No tags selected", "Please select at least one tag category in the settings")
+    #     return
 
     ctx = ap.get_context()
     database = ap.get_api()
 
-    engines_attribute = ensure_attribute(database, "AI-Engines") if settings.folder_use_ai_engines else None
-    types_attribute = ensure_attribute(database, "AI-Types") if settings.folder_use_ai_types else None
-    genres_attribute = ensure_attribute(database, "AI-Genres") if settings.folder_use_ai_genres else None
+    # engines_attribute = ensure_attribute(database, "AI-Engines") if settings.folder_use_ai_engines else None
+    # types_attribute = ensure_attribute(database, "AI-Types") if settings.folder_use_ai_types else None
+    # genres_attribute = ensure_attribute(database, "AI-Genres") if settings.folder_use_ai_genres else None
+
+    engines_attribute = ensure_attribute(database, "AI-Engines")
+    types_attribute = ensure_attribute(database, "AI-Types")
+    genres_attribute = ensure_attribute(database, "AI-Genres")
 
     attributes = [engines_attribute, types_attribute, genres_attribute]
 
