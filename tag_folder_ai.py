@@ -16,6 +16,10 @@ from labels.variants import engines_variants, types_variants, genres_variants
 from ai.constants import input_token_price, output_token_price
 from ai.tokens import count_tokens
 
+from package_settings import TaggerSettings
+
+settings = TaggerSettings()
+
 prompt = (
     "Write tags for the folder: required game engines (if it has e.g. uasset or unitypackage) or 'All' if assets have common types, "
     "content types (texture, sprite, model, vfx, sfx, etc.), and detailed genres."
@@ -91,6 +95,7 @@ def proceed_callback(
 
 
 OPENAI_API_KEY = init_openai_key()
+
 
 def get_openai_response(in_prompt, model="gpt-4o-mini"):
     headers = {
@@ -168,11 +173,16 @@ def tag_folder(
 
 
 def main():
+    if not settings.any_folder_tags_selected():
+        ap.UI().show_error("No tags selected", "Please select at least one tag category in the settings")
+        return
+
     ctx = ap.get_context()
     database = ap.get_api()
-    engines_attribute = ensure_attribute(database, "AI-Engines")
-    types_attribute = ensure_attribute(database, "AI-Types")
-    genres_attribute = ensure_attribute(database, "AI-Genres")
+
+    engines_attribute = ensure_attribute(database, "AI-Engines") if settings.folder_use_ai_engines else None
+    types_attribute = ensure_attribute(database, "AI-Types") if settings.folder_use_ai_types else None
+    genres_attribute = ensure_attribute(database, "AI-Genres") if settings.folder_use_ai_genres else None
 
     attributes = [engines_attribute, types_attribute, genres_attribute]
 

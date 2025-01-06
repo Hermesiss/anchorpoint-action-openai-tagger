@@ -20,12 +20,24 @@ from labels.extensions import unity_extensions, unreal_extensions, audio_extensi
 from labels.variants import engines_variants, types_variants, genres_variants, objects_variants
 from ai.constants import input_pixel_price, input_token_price, output_token_price
 from ai.tokens import count_tokens
+from package_settings import TaggerSettings
+
+settings = TaggerSettings()
 
 prompt = (
     "You are a file tagging AI. When asked, write tags for each file in the order they were presented: "
-    "content types (texture, sprite, model, vfx, sfx, etc.), detailed genres and objects in the image"
-    "Fill all 3 categories for each image. "
-    "Example: \n3D Model,Texture,Sprite,Animated;Action,Adventure,RPG,Lowpoly,Metal,Steampunk;Shovel,Potion,Armor")
+)
+
+if settings.file_label_ai_types:
+    prompt += "content types (texture, sprite, model, vfx, sfx, etc.),"
+
+if settings.file_label_ai_genres:
+    prompt += "detailed genres,"
+
+if settings.file_label_ai_objects:
+    prompt += "objects and other keywords in the image, "
+
+prompt += "fill all tags for each image."
 
 output_token_count = 100
 
@@ -39,6 +51,43 @@ all_variants = {
     "AI-Objects": objects_variants
 }
 
+items = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": [],
+    "properties": {}
+}
+
+if settings.file_label_ai_types:
+    items["required"].append("types")
+    items["properties"]["types"] = {
+        "type": "array",
+        "items": {
+            "type": "string",
+            "additionalProperties": False,
+        }
+    }
+
+if settings.file_label_ai_genres:
+    items["required"].append("genres")
+    items["properties"]["genres"] = {
+        "type": "array",
+        "items": {
+            "type": "string",
+            "additionalProperties": False,
+        }
+    }
+
+if settings.file_label_ai_objects:
+    items["required"].append("objects")
+    items["properties"]["objects"] = {
+        "type": "array",
+        "items": {
+            "type": "string",
+            "additionalProperties": False,
+        }
+    }
+
 response_format = {"type": "json_schema", "json_schema":
     {
         "name": "TaggingSchema",
@@ -50,34 +99,7 @@ response_format = {"type": "json_schema", "json_schema":
             "properties": {
                 "tags": {
                     "type": "array",
-                    "items": {
-                        "type": "object",
-                        "additionalProperties": False,
-                        "required": ["types", "genres", "objects"],
-                        "properties": {
-                            "types": {
-                                "type": "array",
-                                "items": {
-                                    "type": "string",
-                                    "additionalProperties": False,
-                                }
-                            },
-                            "genres": {
-                                "type": "array",
-                                "items": {
-                                    "type": "string",
-                                    "additionalProperties": False,
-                                }
-                            },
-                            "objects": {
-                                "type": "array",
-                                "items": {
-                                    "type": "string",
-                                    "additionalProperties": False,
-                                }
-                            }
-                        },
-                    }
+                    "items": items
                 }
             },
             "name": "TaggingSchema"
@@ -85,14 +107,14 @@ response_format = {"type": "json_schema", "json_schema":
     }}
 
 
-def calculate_file_hash(file_path, hash_algorithm="sha256"):
+def calculate_file_hash(file_path, hash_algorithm="sha256", length: int = 8):
     hash_func = hashlib.new(hash_algorithm)
 
     with open(file_path, "rb") as f:
         while chunk := f.read(8192):
             hash_func.update(chunk)
 
-    return hash_func.hexdigest()
+    return hash_func.hexdigest()[:length]
 
 
 def encode_image(image_path):
@@ -143,7 +165,9 @@ def get_preview_image(workspace_id, input_path, output_folder):
 
     return image_path
 
+
 OPENAI_API_KEY = init_openai_key()
+
 
 def get_openai_response_images(in_prompt, image_paths: list[str], model="gpt-4o-mini") -> list[Any]:
     if len(image_paths) == 0 or len(image_paths) > images_per_request:
@@ -176,6 +200,8 @@ def get_openai_response_images(in_prompt, image_paths: list[str], model="gpt-4o-
         "response_format": response_format
     }
 
+    print(f"Body: {payload}")
+
     try:
         response = requests.post(OPENAI_API_URL, headers=headers, json=payload)
         response.raise_for_status()
@@ -190,6 +216,7 @@ def get_openai_response_images(in_prompt, image_paths: list[str], model="gpt-4o-
     except json.JSONDecodeError:
         print("Failed to parse the response")
         return []
+
 
 previews_sliced = []
 original_files: dict[str, str] = {}
@@ -273,34 +300,36 @@ def proceed_callback(database):
                 # ap.UI().navigate_to_folder(os.path.dirname(original_files[p[j]]))
                 ap.UI().navigate_to_file(original_files[p[j]])
 
-                types = tags["types"]
-                types_tags = aps.AttributeTagList()
-                for k, tag in enumerate(types):
-                    types[k] = replace_tag(tag, all_variants["AI-Types"])
-                    new_tag = check_or_update_attribute(attributes[0], types[k], database)
-                    types_tags.append(new_tag)
+                if settings.file_label_ai_types:
+                    types = tags["types"]
+                    types_tags = aps.AttributeTagList()
+                    for k, tag in enumerate(types):
+                        types[k] = replace_tag(tag, all_variants["AI-Types"])
+                        new_tag = check_or_update_attribute(attributes[0], types[k], database)
+                        types_tags.append(new_tag)
 
-                database.attributes.set_attribute_value(original_files[p[j]], "AI-Types", types_tags)
+                    database.attributes.set_attribute_value(original_files[p[j]], "AI-Types", types_tags)
 
-                genres = tags["genres"]
-                genres_tags = aps.AttributeTagList()
+                if settings.file_label_ai_genres:
+                    genres = tags["genres"]
+                    genres_tags = aps.AttributeTagList()
 
-                for k, tag in enumerate(genres):
-                    genres[k] = replace_tag(tag, all_variants["AI-Genres"])
-                    new_tag = check_or_update_attribute(attributes[1], genres[k], database)
-                    genres_tags.append(new_tag)
+                    for k, tag in enumerate(genres):
+                        genres[k] = replace_tag(tag, all_variants["AI-Genres"])
+                        new_tag = check_or_update_attribute(attributes[1], genres[k], database)
+                        genres_tags.append(new_tag)
 
-                objects = tags["objects"]
-                objects_tags = aps.AttributeTagList()
+                    database.attributes.set_attribute_value(original_files[p[j]], "AI-Genres", genres_tags)
 
-                database.attributes.set_attribute_value(original_files[p[j]], "AI-Genres", genres_tags)
+                if settings.file_label_ai_objects:
+                    objects = tags["objects"]
+                    objects_tags = aps.AttributeTagList()
+                    for k, tag in enumerate(objects):
+                        objects[k] = replace_tag(tag, all_variants["AI-Objects"])
+                        new_tag = check_or_update_attribute(attributes[2], objects[k], database)
+                        objects_tags.append(new_tag)
 
-                for k, tag in enumerate(objects):
-                    objects[k] = replace_tag(tag, all_variants["AI-Objects"])
-                    new_tag = check_or_update_attribute(attributes[2], objects[k], database)
-                    objects_tags.append(new_tag)
-
-                database.attributes.set_attribute_value(original_files[p[j]], "AI-Objects", objects_tags)
+                    database.attributes.set_attribute_value(original_files[p[j]], "AI-Objects", objects_tags)
             progress2.finish()
 
         progress.finish()
@@ -479,13 +508,17 @@ initial_folder = ""
 
 
 def main():
+    if not settings.any_file_tags_selected():
+        ap.UI().show_error("No tags selected", "Please select at least one tag type in the settings")
+        return
+
     global ctx
     ctx = ap.get_context()
     database = ap.get_api()
     # Create or get the "AI Tags" attributes
-    types_attribute = ensure_attribute(database, "AI-Types")
-    genres_attribute = ensure_attribute(database, "AI-Genres")
-    objects_attribute = ensure_attribute(database, "AI-Objects")
+    types_attribute = ensure_attribute(database, "AI-Types") if settings.file_label_ai_types else None
+    genres_attribute = ensure_attribute(database, "AI-Genres") if settings.file_label_ai_genres else None
+    objects_attribute = ensure_attribute(database, "AI-Objects") if settings.file_label_ai_objects else None
 
     global attributes
     attributes = [types_attribute, genres_attribute, objects_attribute]
