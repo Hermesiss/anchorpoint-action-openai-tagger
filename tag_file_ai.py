@@ -35,7 +35,7 @@ if settings.file_label_ai_genres:
     prompt += "detailed genres,"
 
 if settings.file_label_ai_objects:
-    prompt += "objects and other keywords in the image, "
+    prompt += f"objects and other keywords in the image (min {settings.file_label_ai_objects_min}, max {settings.file_label_ai_objects_max}), "
 
 prompt += "fill all tags for each image."
 

@@ -19,6 +19,8 @@ class TaggerSettings:
     file_label_ai_types: bool
     file_label_ai_genres: bool
     file_label_ai_objects: bool
+    file_label_ai_objects_min: int
+    file_label_ai_objects_max: int
     folder_use_ai_engines: bool
     folder_use_ai_types: bool
     folder_use_ai_genres: bool
@@ -34,6 +36,8 @@ class TaggerSettings:
         self.file_label_ai_types = bool(self.get("file_label_ai_types", True))
         self.file_label_ai_genres = bool(self.get("file_label_ai_genres", True))
         self.file_label_ai_objects = bool(self.get("file_label_ai_objects", True))
+        self.file_label_ai_objects_min = int(str(self.get("file_label_ai_objects_min", 1)))
+        self.file_label_ai_objects_max = int(str(self.get("file_label_ai_objects_max", 5)))
         self.folder_use_ai_engines = bool(self.get("folder_use_ai_engines", True))
         self.folder_use_ai_types = bool(self.get("folder_use_ai_types", True))
         self.folder_use_ai_genres = bool(self.get("folder_use_ai_genres", True))
@@ -43,6 +47,8 @@ class TaggerSettings:
         self.set("file_label_ai_types", self.file_label_ai_types)
         self.set("file_label_ai_genres", self.file_label_ai_genres)
         self.set("file_label_ai_objects", self.file_label_ai_objects)
+        self.set("file_label_ai_objects_min", self.file_label_ai_objects_min)
+        self.set("file_label_ai_objects_max", self.file_label_ai_objects_max)
         self.set("folder_use_ai_engines", self.folder_use_ai_engines)
         self.set("folder_use_ai_types", self.folder_use_ai_types)
         self.set("folder_use_ai_genres", self.folder_use_ai_genres)
@@ -65,9 +71,13 @@ def apply_callback(dialog: ap.Dialog):
     settings.file_label_ai_genres = bool(dialog.get_value("file_label_ai_genres"))
     settings.file_label_ai_objects = bool(dialog.get_value("file_label_ai_objects"))
 
+    settings.file_label_ai_objects_min = int(str(dialog.get_value("file_label_ai_objects_min")))
+    settings.file_label_ai_objects_max = int(str(dialog.get_value("file_label_ai_objects_max")))
+
     settings.folder_use_ai_engines = bool(dialog.get_value("folder_use_ai_engines"))
     settings.folder_use_ai_types = bool(dialog.get_value("folder_use_ai_types"))
     settings.folder_use_ai_genres = bool(dialog.get_value("folder_use_ai_genres"))
+
     settings.store()
     ap.UI().show_success("Token Updated", "The token has been stored in your system environment")
     dialog.close()
@@ -89,13 +99,22 @@ def main():
         token = ""
 
     dialog.add_input(token, var="token", width=400, placeholder="sk-proj-45jdh5k3kjdh5k3jh54kjh3...", password=True)
+    dialog.start_section("Where to get?")
     dialog.add_info(
         "An API token is an identifier (similar to username and password), that<br>allows you to access the AI-cloud services from OpenAi. Create an<br>API Token on <a href='https://platform.openai.com/settings/organization/api-keys'>their website</a>. You will need to set up billing first.")
+    dialog.end_section()
 
-    dialog.add_text("<b>File Settings</b>")
-    dialog.add_checkbox(settings.file_label_ai_types, var="file_label_ai_types", text="Label Types")
-    dialog.add_checkbox(settings.file_label_ai_genres, var="file_label_ai_genres", text="Label Genres")
-    dialog.add_checkbox(settings.file_label_ai_objects, var="file_label_ai_objects", text="Label Objects")
+    dialog.start_section("File Settings", folded=False)
+    dialog.add_checkbox(settings.file_label_ai_types, var="file_label_ai_types").add_text("Label Types")
+    dialog.add_checkbox(settings.file_label_ai_genres, var="file_label_ai_genres").add_text("Label Genres")
+    (
+        dialog.add_checkbox(settings.file_label_ai_objects, var="file_label_ai_objects")
+        .add_text("Label Objects. Count:")
+        .add_input(str(settings.file_label_ai_objects_min), var="file_label_ai_objects_min", width=50)
+        .add_text("-")
+        .add_input(str(settings.file_label_ai_objects_max), var="file_label_ai_objects_max", width=50)
+    )
+    dialog.end_section()
 
     # dialog.add_text("<b>Folder Settings</b>")
     # dialog.add_checkbox(settings.folder_use_ai_engines, var="folder_use_ai_engines", text="Use Engines")
