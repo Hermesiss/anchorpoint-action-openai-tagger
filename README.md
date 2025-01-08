@@ -52,3 +52,7 @@ This action will automatically tag assets based on their preview and create 3 at
 - Wait for the preparation stage to finish - generating previews and optimizing them to reduce the token count
 - You will be prompted with **token count** and **cost estimation** and a confirmation dialog
 - If you confirm, the action will start, and you will be notified when it finishes
+
+---
+
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/V7V318MCBR)

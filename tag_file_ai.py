@@ -39,7 +39,7 @@ if settings.file_label_ai_objects:
 
 prompt += "fill all tags for each image."
 
-output_token_count = 100
+output_token_count = 200
 
 images_per_request = 10
 proceed_dialog: ap.Dialog
@@ -207,7 +207,7 @@ def get_openai_response_images(in_prompt, image_paths: list[str], model="gpt-4o-
         response.raise_for_status()
         result = response.json()
 
-        result_content = result.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
+        result_content = result["choices"][0]["message"]["content"].strip()
         parsed = json.loads(result_content)
         return parsed.get("tags", [])
     except requests.exceptions.RequestException as e:

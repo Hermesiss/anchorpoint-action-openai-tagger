@@ -23,6 +23,7 @@ action:
   - pillow
 
   script: "tag_file_ai.py"
+  settings: "package_settings.py"
 
   register:
     file:

@@ -116,10 +116,11 @@ def main():
     )
     dialog.end_section()
 
-    # dialog.add_text("<b>Folder Settings</b>")
-    # dialog.add_checkbox(settings.folder_use_ai_engines, var="folder_use_ai_engines", text="Use Engines")
-    # dialog.add_checkbox(settings.folder_use_ai_types, var="folder_use_ai_types", text="Use Types")
-    # dialog.add_checkbox(settings.folder_use_ai_genres, var="folder_use_ai_genres", text="Use Genres")
+    dialog.start_section("Folder Settings", folded=False)
+    dialog.add_checkbox(settings.folder_use_ai_engines, var="folder_use_ai_engines", text="Use Engines")
+    dialog.add_checkbox(settings.folder_use_ai_types, var="folder_use_ai_types", text="Use Types")
+    dialog.add_checkbox(settings.folder_use_ai_genres, var="folder_use_ai_genres", text="Use Genres")
+    dialog.end_section()
 
     dialog.add_button("Apply", callback=apply_callback)
     dialog.show()

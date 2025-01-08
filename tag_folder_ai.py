@@ -1,4 +1,5 @@
 # This example demonstrates how to create a simple dialog in Anchorpoint
+import json
 from typing import Any
 
 import anchorpoint as ap
@@ -20,13 +21,20 @@ from package_settings import TaggerSettings
 
 settings = TaggerSettings()
 
-prompt = (
-    "Write tags for the folder: required game engines (if it has e.g. uasset or unitypackage) or 'All' if assets have common types, "
-    "content types (texture, sprite, model, vfx, sfx, etc.), and detailed genres."
-    "Use commas within categories and semicolons between categories.\n"
-    "Do not include any prefixes or additional text in the response, only the tags.\n"
-    "Example: \nUnity,Unreal Engine;3D Model,Texture,Sprite,Animated;Action,Adventure,RPG,Lowpoly,Metal,Steampunk,\n")
-output_token_count = 100
+prompt = "Write tags for the folder:"
+
+if settings.folder_use_ai_engines:
+    prompt += "required game engines (if it has e.g. uasset or unitypackage) or 'All' if assets have common types, "
+
+if settings.folder_use_ai_types:
+    prompt += "content types (Texture, Sprite, Model, VFX, SFX, etc.), "
+
+if settings.folder_use_ai_genres:
+    prompt += "detailed genres, "
+
+prompt += "fill all tags"
+
+output_token_count = 200
 
 proceed_dialog: ap.Dialog
 
@@ -35,6 +43,58 @@ all_variants = {
     "AI-Types": types_variants,
     "AI-Genres": genres_variants,
 }
+
+items = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": [],
+    "properties": {}
+}
+
+if settings.folder_use_ai_engines:
+    items["required"].append("engines")
+    items["properties"]["engines"] = {
+        "type": "array",
+        "items": {
+            "type": "string",
+            "additionalProperties": False,
+        }
+    }
+
+if settings.folder_use_ai_types:
+    items["required"].append("types")
+    items["properties"]["types"] = {
+        "type": "array",
+        "items": {
+            "type": "string",
+            "additionalProperties": False,
+        }
+    }
+
+if settings.folder_use_ai_genres:
+    items["required"].append("genres")
+    items["properties"]["genres"] = {
+        "type": "array",
+        "items": {
+            "type": "string",
+            "additionalProperties": False,
+        }
+    }
+
+response_format = {"type": "json_schema", "json_schema":
+    {
+        "name": "TaggingSchema",
+        "strict": True,
+        "schema": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["items"],
+            "properties": {
+                "items": items
+            },
+            "name": "TaggingSchema"
+        }
+    }}
 
 
 def get_folder_structure(input_path) -> dict[Any, list[Any]]:
@@ -97,7 +157,7 @@ def proceed_callback(
 OPENAI_API_KEY = init_openai_key()
 
 
-def get_openai_response(in_prompt, model="gpt-4o-mini"):
+def get_openai_response(in_prompt, model="gpt-4o-mini") -> dict:
     headers = {
         "Authorization": f"Bearer {OPENAI_API_KEY}",
         "Content-Type": "application/json"
@@ -109,18 +169,22 @@ def get_openai_response(in_prompt, model="gpt-4o-mini"):
             {"role": "system", "content": "You are a folder tagging AI."},
             {"role": "user", "content": in_prompt}
         ],
-        "max_tokens": 100
+        "response_format": response_format
     }
+
+    print(f"Body: {payload}")
 
     try:
         response = requests.post(OPENAI_API_URL, headers=headers, json=payload)
         response.raise_for_status()
         result = response.json()
-        return result["choices"][0]["message"]["content"].strip()
+        result_content = result["choices"][0]["message"]["content"].strip()
+        parsed = json.loads(result_content)
+        return parsed["items"]
     except requests.exceptions.RequestException as e:
-        return f"Request error: {e}"
+        return {"error": str(e)}
     except KeyError:
-        return "Unexpected response structure"
+        return {"error": "No response from OpenAI"}
 
 
 def tag_folder(
@@ -128,8 +192,11 @@ def tag_folder(
         attributes: list[aps.Attribute]):
     response = get_openai_response(full_prompt)
     print(response)
+    if response.get("error"):
+        ap.UI().show_error("Error", f"Error while tagging folder: {response['error']}")
+        return
 
-    tags = response.split(";")
+    tags = [response["engines"], response["types"], response["genres"]]
     if len(tags) != len(attributes):
         ap.UI().show_error(
             "Error",
@@ -146,7 +213,7 @@ def tag_folder(
         anchorpoint_tag_names = {tag.name for tag in anchorpoint_tags}
 
         # Add new tags from image_tags that are not already in anchorpoint_tag_names
-        folder_tags = tag.split(",")
+        folder_tags = tag
         replaced_tags = []
 
         for folder_tag in folder_tags:
@@ -173,20 +240,16 @@ def tag_folder(
 
 
 def main():
-    # if not settings.any_folder_tags_selected():
-    #     ap.UI().show_error("No tags selected", "Please select at least one tag category in the settings")
-    #     return
+    if not settings.any_folder_tags_selected():
+        ap.UI().show_error("No tags selected", "Please select at least one tag category in the settings")
+        return
 
     ctx = ap.get_context()
     database = ap.get_api()
 
-    # engines_attribute = ensure_attribute(database, "AI-Engines") if settings.folder_use_ai_engines else None
-    # types_attribute = ensure_attribute(database, "AI-Types") if settings.folder_use_ai_types else None
-    # genres_attribute = ensure_attribute(database, "AI-Genres") if settings.folder_use_ai_genres else None
-
-    engines_attribute = ensure_attribute(database, "AI-Engines")
-    types_attribute = ensure_attribute(database, "AI-Types")
-    genres_attribute = ensure_attribute(database, "AI-Genres")
+    engines_attribute = ensure_attribute(database, "AI-Engines") if settings.folder_use_ai_engines else None
+    types_attribute = ensure_attribute(database, "AI-Types") if settings.folder_use_ai_types else None
+    genres_attribute = ensure_attribute(database, "AI-Genres") if settings.folder_use_ai_genres else None
 
     attributes = [engines_attribute, types_attribute, genres_attribute]
 

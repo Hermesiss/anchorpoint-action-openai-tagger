@@ -22,6 +22,7 @@ action:
   - tiktoken
 
   script: "tag_folder_ai.py"
+  settings: "package_settings.py"
 
   register:
     folder:
