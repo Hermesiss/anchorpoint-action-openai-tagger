@@ -6,14 +6,14 @@
 version: 1.0
 
 action:
-  name: "Tag Files with AI"
+  name: "Tag File Content with AI"
 
   version: 1
   id: "ap::open_ai_tagger::file"
   category: "ai"
   type: python
   author: "Hermesiss"
-  description: "Creates AI-based tags on selected files"
+  description: "Creates AI-based tags on selected files by uploading proxy files to OpenAI"
   enable: true
   icon:
     path: icons/tagImage.svg

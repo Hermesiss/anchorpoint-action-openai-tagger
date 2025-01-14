@@ -64,7 +64,7 @@ settings = TaggerSettings()
 def apply_callback(dialog: ap.Dialog):
     token = str(dialog.get_value("token"))
     if token == "":
-        ap.UI().show_error("No token entered", "Please enter a valid API token")
+        ap.UI().show_error("No key entered", "Please enter a valid API key")
         return
 
     os.environ["OPENAI_API_KEY"] = token
@@ -105,7 +105,7 @@ def main():
 
     dialog.add_input(token, var="token", width=400, placeholder="sk-proj-45jdh5k3kjdh5k3jh54kjh3...", password=True)
     dialog.add_info(
-        "An API token is an identifier (similar to username and password), that<br>allows you to access the AI-cloud services from OpenAI. Create an<br>API Token on <a href='https://platform.openai.com/settings/organization/api-keys'>the Open AI website</a>. You will need to set up billing first.")
+        "An API key is an identifier (similar to username and password), that<br>allows you to access the AI-cloud services from OpenAI. Create an<br>API key on <a href='https://platform.openai.com/settings/organization/api-keys'>the Open AI website</a>. You will need to set up billing first.")
 
     dialog.start_section("File Settings", folded=False)
     dialog.add_checkbox(settings.file_label_ai_types, var="file_label_ai_types",text="Label Types")

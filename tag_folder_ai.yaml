@@ -13,7 +13,7 @@ action:
   category: "ai"
   type: python
   author: "Hermesiss"
-  description: "Creates AI-based folder tags"
+  description: "Scans the contents of this folder and applies AI tags based on file names"
   enable: true
   icon:
     path: icons/tagImage.svg
