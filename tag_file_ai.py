@@ -148,7 +148,7 @@ def get_preview_image(workspace_id, input_path, output_folder):
             shutil.copy(existing_preview, image_path)
 
         print(f"Existing preview found: {existing_preview}\nCopying to {image_path}")
-        return existing_preview
+        return image_path
 
     print(f"Existing preview not found for {input_path}, generating new one")
 
