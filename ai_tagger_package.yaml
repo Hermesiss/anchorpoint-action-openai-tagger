@@ -10,7 +10,7 @@ action:
   name: "OpenAI file tagging"
 
   #Optional Properties
-  version: 2
+  version: 3
   id: "ap::package::open_ai_tagger"
   category: "ai"
   type: package

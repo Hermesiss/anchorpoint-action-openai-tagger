@@ -11,6 +11,7 @@ import requests
 
 from ai.api import init_openai_key, OPENAI_API_URL
 from ap_tools.dialogs import CreateTagFoldersDialogData, create_tag_folders_dialog
+from ap_tools.logging import log, log_err
 from labels.attributes import ensure_attribute, replace_tag, attribute_colors
 from labels.variants import engines_variants, types_variants, genres_variants
 
@@ -24,7 +25,7 @@ settings = TaggerSettings()
 prompt = "Write tags for the folder:"
 
 if settings.folder_use_ai_engines:
-    prompt += "required game engines (if it has e.g. uasset or unitypackage) or 'All' if assets have common types, "
+    prompt += "required game engines (e.g. UE if it has *.uasset or Unity if it has *.unitypackage) or 'All' if assets have common types, "
 
 if settings.folder_use_ai_types:
     prompt += "content types (Texture, Sprite, Model, VFX, SFX, etc.), "
@@ -119,10 +120,10 @@ def tag_folders(workspace_id: str, input_paths: list[str], database: aps.Api, at
             # replace input_path with "root"
             folder_structure_str = folder_structure_str.replace(input_path, "root")
             progress.report_progress(i / len(input_paths) + (2 / total_steps / len(input_paths)))
-            print(folder_structure_str)
+            log(folder_structure_str)
 
             full_prompt = f"{prompt}\nFolder name: {folder_name}\nFolder structure:\n{folder_structure_str}"
-            print(full_prompt)
+            log(full_prompt)
             token_count = count_tokens(full_prompt)
             progress.report_progress(i / len(input_paths) + (3 / total_steps / len(input_paths)))
             input_price = token_count * input_token_price
@@ -172,7 +173,7 @@ def get_openai_response(in_prompt, model="gpt-4o-mini") -> dict:
         "response_format": response_format
     }
 
-    print(f"Body: {payload}")
+    log(f"Body: {payload}")
 
     try:
         response = requests.post(OPENAI_API_URL, headers=headers, json=payload)
@@ -191,16 +192,18 @@ def tag_folder(
         full_prompt: str, input_path: str, workspace_id: str, database: aps.Api,
         attributes: list[aps.Attribute]):
     response = get_openai_response(full_prompt)
-    print(response)
+    log(response)
     if response.get("error"):
-        ap.UI().show_error("Error", f"Error while tagging folder: {response['error']}")
+        err = f"Error while tagging folder: {response['error']}"
+        ap.UI().show_error("Error", err)
+        log_err(err)
         return
 
     tags = [response["engines"], response["types"], response["genres"]]
     if len(tags) != len(attributes):
-        ap.UI().show_error(
-            "Error",
-            f"The number of categories ({len(tags)}) does not match the number of attributes ({len(attributes)})")
+        err = f"The number of categories ({len(tags)}) does not match the number of attributes ({len(attributes)})"
+        ap.UI().show_error("Error", err)
+        log_err(err)
         return
 
     for i, tag in enumerate(tags):

@@ -15,7 +15,7 @@ import requests
 
 from ai.api import init_openai_key, OPENAI_API_URL
 from ap_tools.dialogs import CreateTagFilesDialogData, create_tag_files_dialog
-from ap_tools.logging import log
+from ap_tools.logging import log, log_err
 from image.resize import resize_image
 from labels.attributes import ensure_attribute, replace_tag, attribute_colors
 from labels.extensions import unity_extensions, unreal_extensions, audio_extensions, temp_extensions, godot_extensions, \
@@ -32,7 +32,7 @@ prompt = (
 )
 
 if settings.file_label_ai_types:
-    prompt += "content types (texture, sprite, model, vfx, sfx, etc.),"
+    prompt += "content types (Texture, Sprite, Model, VFX, SFX, etc.),"
 
 if settings.file_label_ai_genres:
     prompt += "detailed genres,"
@@ -216,10 +216,10 @@ def get_openai_response_images(in_prompt, image_paths: list[str], model="gpt-4o-
         parsed = json.loads(result_content)
         return parsed.get("tags", [])
     except requests.exceptions.RequestException as e:
-        log(f"Request error: {e}", True)
+        log_err(f"Request error: {e}")
         return []
     except json.JSONDecodeError:
-        log("Failed to parse the response", True)
+        log_err("Failed to parse the response")
         return []
 
 
@@ -379,7 +379,7 @@ def generate_previews(workspace_id, input_paths, database):
     if len(input_paths) == 0:
         ap.UI().navigate_to_folder(initial_folder)
         ap.UI().show_error("No supported files selected", "Please select files to tag")
-        log("No supported files selected", True)
+        log_err("No supported files selected")
         return
 
     global start_time
