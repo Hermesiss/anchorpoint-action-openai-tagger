@@ -11,26 +11,24 @@ import requests
 
 from ai.api import init_openai_key, OPENAI_API_URL
 from ap_tools.dialogs import CreateTagFoldersDialogData, create_tag_folders_dialog
-from ap_tools.logging import log, log_err
+from common.logging import log, log_err
 from labels.attributes import ensure_attribute, replace_tag, attribute_colors
 from labels.variants import engines_variants, types_variants, genres_variants
 
 from ai.constants import input_token_price, output_token_price
 from ai.tokens import count_tokens
 
-from package_settings import TaggerSettings
-
-settings = TaggerSettings()
+from common.settings import tagger_settings
 
 prompt = "Write tags for the folder:"
 
-if settings.folder_use_ai_engines:
+if tagger_settings.folder_use_ai_engines:
     prompt += "required game engines (e.g. UE if it has *.uasset or Unity if it has *.unitypackage) or 'All' if assets have common types, "
 
-if settings.folder_use_ai_types:
+if tagger_settings.folder_use_ai_types:
     prompt += "content types (Texture, Sprite, Model, VFX, SFX, etc.), "
 
-if settings.folder_use_ai_genres:
+if tagger_settings.folder_use_ai_genres:
     prompt += "detailed genres, "
 
 prompt += "fill all tags"
@@ -52,7 +50,7 @@ items = {
     "properties": {}
 }
 
-if settings.folder_use_ai_engines:
+if tagger_settings.folder_use_ai_engines:
     items["required"].append("engines")
     items["properties"]["engines"] = {
         "type": "array",
@@ -62,7 +60,7 @@ if settings.folder_use_ai_engines:
         }
     }
 
-if settings.folder_use_ai_types:
+if tagger_settings.folder_use_ai_types:
     items["required"].append("types")
     items["properties"]["types"] = {
         "type": "array",
@@ -72,7 +70,7 @@ if settings.folder_use_ai_types:
         }
     }
 
-if settings.folder_use_ai_genres:
+if tagger_settings.folder_use_ai_genres:
     items["required"].append("genres")
     items["properties"]["genres"] = {
         "type": "array",
@@ -243,16 +241,16 @@ def tag_folder(
 
 
 def main():
-    if not settings.any_folder_tags_selected():
+    if not tagger_settings.any_folder_tags_selected():
         ap.UI().show_error("No tags selected", "Please select at least one tag category in the settings")
         return
 
     ctx = ap.get_context()
     database = ap.get_api()
 
-    engines_attribute = ensure_attribute(database, "AI-Engines") if settings.folder_use_ai_engines else None
-    types_attribute = ensure_attribute(database, "AI-Types") if settings.folder_use_ai_types else None
-    genres_attribute = ensure_attribute(database, "AI-Genres") if settings.folder_use_ai_genres else None
+    engines_attribute = ensure_attribute(database, "AI-Engines") if tagger_settings.folder_use_ai_engines else None
+    types_attribute = ensure_attribute(database, "AI-Types") if tagger_settings.folder_use_ai_types else None
+    genres_attribute = ensure_attribute(database, "AI-Genres") if tagger_settings.folder_use_ai_genres else None
 
     attributes = [engines_attribute, types_attribute, genres_attribute]
 

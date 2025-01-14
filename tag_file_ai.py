@@ -15,7 +15,7 @@ import requests
 
 from ai.api import init_openai_key, OPENAI_API_URL
 from ap_tools.dialogs import CreateTagFilesDialogData, create_tag_files_dialog
-from ap_tools.logging import log, log_err
+from common.logging import log, log_err
 from image.resize import resize_image
 from labels.attributes import ensure_attribute, replace_tag, attribute_colors
 from labels.extensions import unity_extensions, unreal_extensions, audio_extensions, temp_extensions, godot_extensions, \
@@ -23,22 +23,20 @@ from labels.extensions import unity_extensions, unreal_extensions, audio_extensi
 from labels.variants import engines_variants, types_variants, genres_variants, objects_variants
 from ai.constants import input_pixel_price, input_token_price, output_token_price
 from ai.tokens import count_tokens
-from package_settings import TaggerSettings
-
-settings = TaggerSettings()
+from common.settings import tagger_settings
 
 prompt = (
     "You are a file tagging AI. When asked, write tags for each file in the order they were presented: "
 )
 
-if settings.file_label_ai_types:
+if tagger_settings.file_label_ai_types:
     prompt += "content types (Texture, Sprite, Model, VFX, SFX, etc.),"
 
-if settings.file_label_ai_genres:
+if tagger_settings.file_label_ai_genres:
     prompt += "detailed genres,"
 
-if settings.file_label_ai_objects:
-    prompt += f"objects and other keywords in the image (min {settings.file_label_ai_objects_min}, max {settings.file_label_ai_objects_max}), "
+if tagger_settings.file_label_ai_objects:
+    prompt += f"objects and other keywords in the image (min {tagger_settings.file_label_ai_objects_min}, max {tagger_settings.file_label_ai_objects_max}), "
 
 prompt += "fill all tags for each image."
 
@@ -61,7 +59,7 @@ items = {
     "properties": {}
 }
 
-if settings.file_label_ai_types:
+if tagger_settings.file_label_ai_types:
     items["required"].append("types")
     items["properties"]["types"] = {
         "type": "array",
@@ -71,7 +69,7 @@ if settings.file_label_ai_types:
         }
     }
 
-if settings.file_label_ai_genres:
+if tagger_settings.file_label_ai_genres:
     items["required"].append("genres")
     items["properties"]["genres"] = {
         "type": "array",
@@ -81,7 +79,7 @@ if settings.file_label_ai_genres:
         }
     }
 
-if settings.file_label_ai_objects:
+if tagger_settings.file_label_ai_objects:
     items["required"].append("objects")
     items["properties"]["objects"] = {
         "type": "array",
@@ -305,7 +303,7 @@ def proceed_callback(database):
                 # ap.UI().navigate_to_folder(os.path.dirname(original_files[p[j]]))
                 ap.UI().navigate_to_file(original_files[p[j]])
 
-                if settings.file_label_ai_types:
+                if tagger_settings.file_label_ai_types:
                     types = tags["types"]
                     types_tags = aps.AttributeTagList()
                     for k, tag in enumerate(types):
@@ -315,7 +313,7 @@ def proceed_callback(database):
 
                     database.attributes.set_attribute_value(original_files[p[j]], "AI-Types", types_tags)
 
-                if settings.file_label_ai_genres:
+                if tagger_settings.file_label_ai_genres:
                     genres = tags["genres"]
                     genres_tags = aps.AttributeTagList()
 
@@ -326,7 +324,7 @@ def proceed_callback(database):
 
                     database.attributes.set_attribute_value(original_files[p[j]], "AI-Genres", genres_tags)
 
-                if settings.file_label_ai_objects:
+                if tagger_settings.file_label_ai_objects:
                     objects = tags["objects"]
                     objects_tags = aps.AttributeTagList()
                     for k, tag in enumerate(objects):
@@ -514,7 +512,7 @@ initial_folder = ""
 
 
 def main():
-    if not settings.any_file_tags_selected():
+    if not tagger_settings.any_file_tags_selected():
         ap.UI().show_error("No tags selected", "Please select at least one tag type in the settings")
         return
 
@@ -522,9 +520,9 @@ def main():
     ctx = ap.get_context()
     database = ap.get_api()
     # Create or get the "AI Tags" attributes
-    types_attribute = ensure_attribute(database, "AI-Types") if settings.file_label_ai_types else None
-    genres_attribute = ensure_attribute(database, "AI-Genres") if settings.file_label_ai_genres else None
-    objects_attribute = ensure_attribute(database, "AI-Objects") if settings.file_label_ai_objects else None
+    types_attribute = ensure_attribute(database, "AI-Types") if tagger_settings.file_label_ai_types else None
+    genres_attribute = ensure_attribute(database, "AI-Genres") if tagger_settings.file_label_ai_genres else None
+    objects_attribute = ensure_attribute(database, "AI-Objects") if tagger_settings.file_label_ai_objects else None
 
     global attributes
     attributes = [types_attribute, genres_attribute, objects_attribute]

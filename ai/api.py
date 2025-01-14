@@ -1,13 +1,11 @@
 import anchorpoint as ap
-import apsync as aps
 import os
 
-from package_settings import TaggerSettings
+from common.settings import tagger_settings
 
 
 def init_openai_key() -> str:
-    settings = TaggerSettings()
-    open_api_key = settings.openai_api_key
+    open_api_key = tagger_settings.openai_api_key
     if not open_api_key:
         ap.UI().show_error("No API key", "Please set up an API key in the settings")
         raise ValueError("No API key set")
