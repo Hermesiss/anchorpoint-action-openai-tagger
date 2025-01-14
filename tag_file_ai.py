@@ -15,9 +15,11 @@ import requests
 
 from ai.api import init_openai_key, OPENAI_API_URL
 from ap_tools.dialogs import CreateTagFilesDialogData, create_tag_files_dialog
+from ap_tools.logging import log
 from image.resize import resize_image
 from labels.attributes import ensure_attribute, replace_tag, attribute_colors
-from labels.extensions import unity_extensions, unreal_extensions, audio_extensions, temp_extensions, godot_extensions
+from labels.extensions import unity_extensions, unreal_extensions, audio_extensions, temp_extensions, godot_extensions, \
+    text_extensions
 from labels.variants import engines_variants, types_variants, genres_variants, objects_variants
 from ai.constants import input_pixel_price, input_token_price, output_token_price
 from ai.tokens import count_tokens
@@ -145,12 +147,13 @@ def get_preview_image(workspace_id, input_path, output_folder):
         # copy the existing preview to the output folder because we can not modify the existing preview
         if not os.path.exists(image_path):
             os.makedirs(output_folder, exist_ok=True)
-            shutil.copy(existing_preview, image_path)
 
-        print(f"Existing preview found: {existing_preview}\nCopying to {image_path}")
+        shutil.copy(existing_preview, image_path)
+
+        log(f"Existing preview found: {existing_preview}\nCopying to {image_path}")
         return image_path
 
-    print(f"Existing preview not found for {input_path}, generating new one")
+    log(f"Existing preview not found for {input_path}, generating new one")
 
     if not os.path.exists(image_path):
         aps.generate_thumbnails(
@@ -160,10 +163,10 @@ def get_preview_image(workspace_id, input_path, output_folder):
             with_preview=True,
             workspace_id=workspace_id,
         )
-        print(f"Generated preview for {input_path}")
+        log(f"Generated preview for {input_path}")
         os.rename(os.path.join(output_folder, f"{file_name}_pt.png"), image_path)
     else:
-        print(f"Load cached preview for {input_path}")
+        log(f"Load cached preview for {input_path}")
 
     return image_path
 
@@ -202,7 +205,7 @@ def get_openai_response_images(in_prompt, image_paths: list[str], model="gpt-4o-
         "response_format": response_format
     }
 
-    print(f"Body: {payload}")
+    log(f"Body: {payload}")
 
     try:
         response = requests.post(OPENAI_API_URL, headers=headers, json=payload)
@@ -213,10 +216,10 @@ def get_openai_response_images(in_prompt, image_paths: list[str], model="gpt-4o-
         parsed = json.loads(result_content)
         return parsed.get("tags", [])
     except requests.exceptions.RequestException as e:
-        print(f"Request error: {e}")
+        log(f"Request error: {e}", True)
         return []
     except json.JSONDecodeError:
-        print("Failed to parse the response")
+        log("Failed to parse the response", True)
         return []
 
 
@@ -263,7 +266,7 @@ def change_slices_to_skip(database):
     new_previews_sliced = [
         new_previews[i:i + images_per_request] for i in
         range(0, len(new_previews), images_per_request)]
-    print(f"Reduced previews from {prev_count} to {len(new_previews)}")
+    log(f"Reduced previews from {prev_count} to {len(new_previews)}")
     previews_sliced = new_previews_sliced
 
 
@@ -278,7 +281,7 @@ def proceed_callback(database):
             "Requesting AI tags", "Processing", infinite=False, show_loading_screen=True, cancelable=True)
         global start_time
         start_time = datetime.now()
-        print(f"Started tagging {len(previews_sliced)} previews")
+        log(f"Started tagging {len(previews_sliced)} previews")
         progress.report_progress(0)
         for i, p in enumerate(previews_sliced):
             if progress.canceled:
@@ -287,7 +290,7 @@ def proceed_callback(database):
                 return
             response = get_openai_response_images(prompt, p)
             progress.report_progress((i + 1) / len(previews_sliced))
-            print(response)
+            log(response)
             if len(response) < len(p):
                 ap.UI().navigate_to_folder(initial_folder)
                 ap.UI().show_error(
@@ -336,7 +339,7 @@ def proceed_callback(database):
 
         progress.finish()
         finish_time = datetime.now()
-        print(f"Finished tagging in {finish_time - start_time}")
+        log(f"Finished tagging in {finish_time - start_time}")
         ap.UI().navigate_to_folder(initial_folder)
 
     ctx.run_async(run)
@@ -376,12 +379,12 @@ def generate_previews(workspace_id, input_paths, database):
     if len(input_paths) == 0:
         ap.UI().navigate_to_folder(initial_folder)
         ap.UI().show_error("No supported files selected", "Please select files to tag")
-        print("No supported files selected")
+        log("No supported files selected", True)
         return
 
     global start_time
     start_time = datetime.now()
-    print(f"Started generating previews for {len(input_paths)} files")
+    log(f"Started generating previews for {len(input_paths)} files")
 
     # start progress
     global generating_previews_progress
@@ -396,7 +399,7 @@ def generate_previews(workspace_id, input_paths, database):
     previews = []
     global file_input_paths
     file_input_paths = input_paths
-    print("Output folder: {}".format(output_folder.replace("\\", "\\\\")))
+    log("Output folder: {}".format(output_folder.replace("\\", "\\\\")))
     proceed_generating_previews(workspace_id, database, output_folder)
     # start generating first 10 previews
     for i in range(min(images_per_request, len(input_paths))):
@@ -418,7 +421,7 @@ def generate_preview_async(workspace_id, input_path, output_folder, database):
 
     global generating_previews_count
     generating_previews_count += 1
-    print(f"Progress cancelled: {generating_previews_progress.canceled}")
+    log(f"Progress cancelled: {generating_previews_progress.canceled}")
     if generating_previews_progress.canceled:
         cancel_generating_previews = True
         generating_previews_progress.finish()
@@ -433,9 +436,9 @@ def finish_generating_previews(input_paths, database):
     if generating_previews_progress.canceled:
         return
     generating_previews_progress.finish()
-    print(f"Finished generating previews for {len(input_paths)} files")
+    log(f"Finished generating previews for {len(input_paths)} files")
     current_time = datetime.now()
-    print(f"Generated {len(input_paths)} previews in {current_time - start_time}")
+    log(f"Generated {len(input_paths)} previews in {current_time - start_time}")
     process_images(input_paths, database)
 
 
@@ -459,8 +462,8 @@ def process_images(input_paths, database):
 
     # calculate token count
     pixel_price = pixel_count * input_pixel_price
-    print(f"Pixel count: {pixel_count}")
-    print(f"Pixel price: {pixel_price}")
+    log(f"Pixel count: {pixel_count}")
+    log(f"Pixel price: {pixel_price}")
     progress.finish()
     token_count = count_tokens(prompt + ", ".join(asset_names))
     total_tokens = token_count * len(previews_sliced)
@@ -483,7 +486,7 @@ def filter_ignored_extensions(files: list[str], ignored_ext: list[list[str]]) ->
         file_ext = file.split(".")[-1]
         for ignored_extension in ignored_ext:
             if file_ext in ignored_extension:
-                print(f"Ignoring file because of extension: {file}")
+                log(f"Ignoring file because of extension: {file}")
                 break
         else:
             filtered_files.append(file)
@@ -493,7 +496,8 @@ def filter_ignored_extensions(files: list[str], ignored_ext: list[list[str]]) ->
 
 ignored_extensions = [
     unity_extensions, unreal_extensions, godot_extensions,
-    temp_extensions, audio_extensions
+    temp_extensions, audio_extensions,
+    text_extensions
 ]
 
 
@@ -529,7 +533,7 @@ def main():
 
     selected_folders = ctx.selected_folders
 
-    print(selected_folders)
+    log(selected_folders)
 
     if len(selected_folders) > 0:
         # TODO remove this after fixing the folder selection
@@ -538,14 +542,14 @@ def main():
             60000)
         for folder in selected_folders:
             inner_files = get_all_files_recursive(folder)
-            print(inner_files)
+            log(inner_files)
             selected_files.extend(inner_files)
 
     filtered_files = filter_ignored_extensions(selected_files, ignored_extensions)
 
     global initial_folder
     initial_folder = os.path.dirname(ctx.path)
-    print(f"Initial folder: {initial_folder}")
+    log(f"Initial folder: {initial_folder}")
 
     ctx.run_async(generate_previews, ctx.workspace_id, filtered_files, database)
     return

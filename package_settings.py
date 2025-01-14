@@ -24,6 +24,7 @@ class TaggerSettings:
     folder_use_ai_engines: bool
     folder_use_ai_types: bool
     folder_use_ai_genres: bool
+    debug_log: bool
 
     def any_file_tags_selected(self):
         return self.file_label_ai_types or self.file_label_ai_genres or self.file_label_ai_objects
@@ -41,6 +42,7 @@ class TaggerSettings:
         self.folder_use_ai_engines = bool(self.get("folder_use_ai_engines", True))
         self.folder_use_ai_types = bool(self.get("folder_use_ai_types", True))
         self.folder_use_ai_genres = bool(self.get("folder_use_ai_genres", True))
+        self.debug_log = bool(self.get("debug_log", False))
 
     def store(self):
         self.set("openai_api_key", self.openai_api_key)
@@ -52,6 +54,7 @@ class TaggerSettings:
         self.set("folder_use_ai_engines", self.folder_use_ai_engines)
         self.set("folder_use_ai_types", self.folder_use_ai_types)
         self.set("folder_use_ai_genres", self.folder_use_ai_genres)
+        self.set("debug_log", self.debug_log)
         self.local_settings.store()
 
 
@@ -77,6 +80,8 @@ def apply_callback(dialog: ap.Dialog):
     settings.folder_use_ai_engines = bool(dialog.get_value("folder_use_ai_engines"))
     settings.folder_use_ai_types = bool(dialog.get_value("folder_use_ai_types"))
     settings.folder_use_ai_genres = bool(dialog.get_value("folder_use_ai_genres"))
+
+    settings.debug_log = bool(dialog.get_value("debug_log"))
 
     settings.store()
     ap.UI().show_success("Settings Updated", "The API key has been stored in your system environment")
@@ -127,6 +132,11 @@ def main():
     dialog.add_checkbox(settings.folder_use_ai_genres, var="folder_use_ai_genres",text="Label Genres")
     dialog.add_info("e.g. casual, cyberpunk, steampunk")
     dialog.add_separator()
+    dialog.end_section()
+
+    dialog.start_section("Debugging", folded=True)
+    dialog.add_checkbox(settings.debug_log, var="debug_log",text="Enable Extended Logging")
+    dialog.add_info("Log additional information to the console (open with CTRL+SHIFT+P)")
     dialog.end_section()
 
 

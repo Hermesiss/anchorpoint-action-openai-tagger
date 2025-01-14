@@ -16,3 +16,7 @@ temp_extensions = [
 audio_extensions = [
     "mp3", "wav", "ogg", "flac", "aiff", "aif", "wma", "m4a", "aac", "mid", "midi", "mod", "xm", "it", "s3m", "flp",
 ]
+
+text_extensions = [
+    "txt", "md", "markdown", "rtf", "doc", "docx", "pdf", "odt"
+]
