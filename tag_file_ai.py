@@ -1,5 +1,6 @@
 import base64
 import json
+import shutil
 from datetime import datetime
 from typing import Any, Union, Optional
 
@@ -144,7 +145,8 @@ def get_preview_image(workspace_id, input_path, output_folder):
         # copy the existing preview to the output folder because we can not modify the existing preview
         if not os.path.exists(image_path):
             os.makedirs(output_folder, exist_ok=True)
-            os.rename(existing_preview, image_path)
+            shutil.copy(existing_preview, image_path)
+
         print(f"Existing preview found: {existing_preview}\nCopying to {image_path}")
         return existing_preview
 
