@@ -79,14 +79,14 @@ def apply_callback(dialog: ap.Dialog):
     settings.folder_use_ai_genres = bool(dialog.get_value("folder_use_ai_genres"))
 
     settings.store()
-    ap.UI().show_success("Token Updated", "The token has been stored in your system environment")
+    ap.UI().show_success("Settings Updated", "The API key has been stored in your system environment")
     dialog.close()
 
 
 def main():
     # Create a dialog container
     dialog = ap.Dialog()
-    dialog.title = "Replicate Settings"
+    dialog.title = "AI Tagging Settings"
     ctx = ap.get_context()
     if ctx.icon:
         dialog.icon = ctx.icon
@@ -99,39 +99,40 @@ def main():
         token = ""
 
     dialog.add_input(token, var="token", width=400, placeholder="sk-proj-45jdh5k3kjdh5k3jh54kjh3...", password=True)
-    dialog.start_section("Where to get?")
     dialog.add_info(
-        "An API token is an identifier (similar to username and password), that<br>allows you to access the AI-cloud services from OpenAi. Create an<br>API Token on <a href='https://platform.openai.com/settings/organization/api-keys'>their website</a>. You will need to set up billing first.")
-    dialog.end_section()
+        "An API token is an identifier (similar to username and password), that<br>allows you to access the AI-cloud services from OpenAI. Create an<br>API Token on <a href='https://platform.openai.com/settings/organization/api-keys'>the Open AI website</a>. You will need to set up billing first.")
 
     dialog.start_section("File Settings", folded=False)
-    dialog.add_checkbox(settings.file_label_ai_types, var="file_label_ai_types").add_text("Label Types")
-    dialog.add_checkbox(settings.file_label_ai_genres, var="file_label_ai_genres").add_text("Label Genres")
+    dialog.add_checkbox(settings.file_label_ai_types, var="file_label_ai_types",text="Label Types")
+    dialog.add_info("e.g. model, texture, sfx")
+    dialog.add_checkbox(settings.file_label_ai_genres, var="file_label_ai_genres",text="Label Genres")
+    dialog.add_info("e.g. casual, cyberpunk, steampunk")
     (
-        dialog.add_checkbox(settings.file_label_ai_objects, var="file_label_ai_objects")
-        .add_text(F"Label Objects{' ' * 25}Count:")
+        dialog.add_checkbox(settings.file_label_ai_objects, var="file_label_ai_objects",text="Label Objects\t")
+        .add_text("Count:")
         .add_input(str(settings.file_label_ai_objects_min), var="file_label_ai_objects_min", width=50)
         .add_text("-")
         .add_input(str(settings.file_label_ai_objects_max), var="file_label_ai_objects_max", width=50)
     )
+    dialog.add_info("What's in the picture. For example, an axe, a car, a character")
+    dialog.add_separator()
     dialog.end_section()
 
     dialog.start_section("Folder Settings", folded=False)
-    dialog.add_checkbox(settings.folder_use_ai_engines, var="folder_use_ai_engines").add_text("Use Engines")
-    dialog.add_checkbox(settings.folder_use_ai_types, var="folder_use_ai_types").add_text("Use Types")
-    dialog.add_checkbox(settings.folder_use_ai_genres, var="folder_use_ai_genres").add_text("Use Genres")
+    dialog.add_info("This will check the content of the folder, including all subfolders")
+    dialog.add_checkbox(settings.folder_use_ai_engines, var="folder_use_ai_engines",text="Label Engines")
+    dialog.add_info("e.g. Unity, Unreal, Godot")
+    dialog.add_checkbox(settings.folder_use_ai_types, var="folder_use_ai_types",text="Label Types")
+    dialog.add_info("e.g. model, texture, sfx")
+    dialog.add_checkbox(settings.folder_use_ai_genres, var="folder_use_ai_genres",text="Label Genres")
+    dialog.add_info("e.g. casual, cyberpunk, steampunk")
+    dialog.add_separator()
     dialog.end_section()
 
-    dialog.add_button("Apply", callback=apply_callback)
 
-    dialog.add_separator()
-    (
-        dialog
-        .add_info("<a href='https://platform.openai.com/settings/organization/api-keys'>API Keys</a>")
-        .add_info("<a href='https://platform.openai.com/settings/organization/usage'>Usage</a>")
-        .add_info("&nbsp;" * 70)
-        .add_info("<a href='https://ko-fi.com/hermesistrismegistus'>Donate ♥</a>")
-    )
+    dialog.add_info("Monitor your <a href='https://platform.openai.com/settings/organization/api-keys'>API keys</a> and <a href='https://platform.openai.com/settings/organization/usage'>current spending</a> on the OpenAI website. This<br> Action was created by <b>Hermesis Trismegistus</b>.If you like it, feel free to<br><a href='https://ko-fi.com/hermesistrismegistus'>make a donation.</a>")
+
+    dialog.add_button("Apply", callback=apply_callback)
 
     dialog.show()
 

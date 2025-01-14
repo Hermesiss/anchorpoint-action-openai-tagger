@@ -7,22 +7,22 @@ version: "1.0"
 
 action:
   #Must Have Properties
-  name: "AI Folder and File Tools"
+  name: "OpenAI file tagging"
 
   #Optional Properties
   version: 2
-  id: "ap::package::ai_tagger"
+  id: "ap::package::open_ai_tagger"
   category: "ai"
   type: package
   enable: true
   author: "Hermesis Trismegistus"
-  description: Tag folders and files with the help of OpenAi. Requires an API token from OpenAi.
+  description: Tag files by categories and objects with the help of OpenAI's GPT-4o mini. Requires an own API key.
 
   settings: package_settings.py
 
   icon:
-    path: "icons/replicate_logo.svg"
+    path: "icons/openai-logo.svg"
 
   actions:
-    - ap::ai_tagger::folder
-    - ap::ai_tagger::file
+    - ap::open_ai_tagger::folder
+    - ap::open_ai_tagger::file

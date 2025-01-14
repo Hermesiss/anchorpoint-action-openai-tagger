@@ -9,11 +9,11 @@ action:
   name: "Tag Folders with AI"
 
   version: 1
-  id: "ap::ai_tagger::folder"
+  id: "ap::open_ai_tagger::folder"
   category: "ai"
   type: python
   author: "Hermesiss"
-  description: "Creates Folder Tags with AI based on folder structure"
+  description: "Creates AI-based folder tags"
   enable: true
   icon:
     path: icons/tagImage.svg
