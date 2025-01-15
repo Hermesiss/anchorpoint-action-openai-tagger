@@ -78,9 +78,11 @@ def main():
     dialog.add_separator()
     dialog.end_section()
 
-    dialog.start_section("Debugging", folded=True)
+    debug_folded = not tagger_settings.debug_log
+    dialog.start_section("Debugging", folded=debug_folded)
     dialog.add_checkbox(tagger_settings.debug_log, var="debug_log", text="Enable Extended Logging")
     dialog.add_info("Log additional information to the console (open with CTRL+SHIFT+P)")
+    dialog.add_separator()
     dialog.end_section()
 
     dialog.add_info(

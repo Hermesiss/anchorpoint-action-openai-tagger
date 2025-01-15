@@ -161,8 +161,13 @@ def get_preview_image(workspace_id, input_path, output_folder):
             with_preview=True,
             workspace_id=workspace_id,
         )
+        generated_path = os.path.join(output_folder, f"{file_name}_pt.png")
+        if not os.path.exists(generated_path):
+            # preview was not generated
+            return ""
         log(f"Generated preview for {input_path}")
-        os.rename(os.path.join(output_folder, f"{file_name}_pt.png"), image_path)
+
+        os.rename(generated_path, image_path)
     else:
         log(f"Load cached preview for {input_path}")
 
@@ -414,8 +419,9 @@ def generate_preview_async(workspace_id, input_path, output_folder, database):
     if cancel_generating_previews:
         return
     image_path = get_preview_image(workspace_id, input_path, output_folder)
-    previews.append(image_path)
-    original_files[image_path] = input_path
+    if not image_path == "":
+        previews.append(image_path)
+        original_files[image_path] = input_path
 
     global generating_previews_count
     generating_previews_count += 1
@@ -437,6 +443,11 @@ def finish_generating_previews(input_paths, database):
     log(f"Finished generating previews for {len(input_paths)} files")
     current_time = datetime.now()
     log(f"Generated {len(input_paths)} previews in {current_time - start_time}")
+    if len(input_paths) == 0:
+        ap.UI().navigate_to_folder(initial_folder)
+        ap.UI().show_error("No supported files selected", "Please select files to tag")
+        log_err("No supported files selected")
+        return
     process_images(input_paths, database)
 
 
