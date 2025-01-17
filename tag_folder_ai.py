@@ -197,7 +197,12 @@ def tag_folder(
         log_err(err)
         return
 
-    tags = [response["engines"], response["types"], response["genres"]]
+    tags = [
+        response["engines"] if tagger_settings.folder_use_ai_engines else None,
+        response["types"] if tagger_settings.folder_use_ai_types else None,
+        response["genres"] if tagger_settings.folder_use_ai_genres else None
+    ]
+
     if len(tags) != len(attributes):
         err = f"The number of categories ({len(tags)}) does not match the number of attributes ({len(attributes)})"
         ap.UI().show_error("Error", err)
@@ -205,6 +210,9 @@ def tag_folder(
         return
 
     for i, tag in enumerate(tags):
+        if not tag:
+            continue
+
         attribute = attributes[i]
         anchorpoint_tags = attribute.tags
 
